@@ -27,7 +27,7 @@ export async function exportDeckToPdf(
   const widthIn = is4x3 ? '10in' : '13.333in';
   const heightIn = '7.5in';
 
-  const baseHtml = renderDeckToHtml(deck);
+  const baseHtml = renderDeckToHtml(deck, { baseDir: options?.baseDir });
 
   // PDF出力専用のページサイズ・改ページCSSを注入
   const printCss = `

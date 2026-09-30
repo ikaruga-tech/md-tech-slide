@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import { parseMarkdownToSlideDeck } from '../parser/index.js';
 import { renderDeckToHtml } from '../renderer/index.js';
 import { findSlideIndexByLine, findSlideStartLine } from '../parser/slide-locator.js';
@@ -47,6 +48,15 @@ export class SlidePreviewPanel {
       return SlidePreviewPanel.currentPanel;
     }
 
+    const localResourceRoots: vscode.Uri[] = [];
+    if (vscode.workspace.workspaceFolders) {
+      localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
+    }
+    const docUri = editor.document.uri;
+    if (docUri.scheme === 'file') {
+      localResourceRoots.push(vscode.Uri.file(path.dirname(docUri.fsPath)));
+    }
+
     const panel = vscode.window.createWebviewPanel(
       'mdTechSlidePreview',
       'Slide Preview',
@@ -54,6 +64,7 @@ export class SlidePreviewPanel {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
+        localResourceRoots,
       }
     );
 
@@ -102,7 +113,22 @@ export class SlidePreviewPanel {
       });
     `.trim();
 
-    const html = renderDeckToHtml(deck, { scriptContent: clientScript });
+    const docUri = this.activeEditor.document.uri;
+    const baseDir = docUri.scheme === 'file' ? path.dirname(docUri.fsPath) : undefined;
+    if (baseDir && docUri.scheme === 'file') {
+      this.panel.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [
+          ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri),
+          vscode.Uri.file(baseDir),
+        ],
+      };
+    }
+
+    const html = renderDeckToHtml(deck, {
+      scriptContent: clientScript,
+      baseDir,
+    });
     this.panel.webview.html = html;
 
     // 現在のカーソル位置に対応するスライドへスクロール同期

@@ -12,12 +12,16 @@ import type {
   TextSpan,
   ColumnsSlot,
 } from '../types/ir.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { resolveTheme } from '../theme/index.js';
 import { escapeHtml } from './html-escape.js';
 import { generatePreviewCss } from './css-styles.js';
 
 export interface RenderHtmlOptions {
   readonly scriptContent?: string;
+  readonly baseDir?: string;
+  readonly resolveImageSrc?: (src: string) => string;
 }
 
 export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): string {
@@ -26,7 +30,7 @@ export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): 
   const css = generatePreviewCss(theme, aspectRatio);
 
   const slidesHtml = deck.slides
-    .map((slide) => renderSingleSlideHtml(slide, deck.slides.length))
+    .map((slide) => renderSingleSlideHtml(slide, deck.slides.length, options))
     .join('\n');
 
   const clientScript = options?.scriptContent
@@ -50,7 +54,7 @@ ${clientScript}
 </html>`.trim();
 }
 
-function renderSingleSlideHtml(slide: Slide, totalSlides: number): string {
+function renderSingleSlideHtml(slide: Slide, totalSlides: number, options?: RenderHtmlOptions): string {
   const isTitle = slide.type === 'title';
   const cardClasses = `slide-card${isTitle ? ' title-slide' : ''}`;
 
@@ -66,9 +70,9 @@ function renderSingleSlideHtml(slide: Slide, totalSlides: number): string {
   let bodyHtml = '';
   const body = slide.slots.body;
   if (body.type === 'single') {
-    bodyHtml = body.elements.map(renderBlockElementHtml).join('\n');
+    bodyHtml = body.elements.map((el) => renderBlockElementHtml(el, options)).join('\n');
   } else if (body.type === 'columns') {
-    bodyHtml = renderColumnsHtml(body);
+    bodyHtml = renderColumnsHtml(body, options);
   }
 
   const footerHtml = `<div class="slide-footer">${slide.index + 1} / ${totalSlides}</div>`;
@@ -97,7 +101,7 @@ function renderSingleSlideHtml(slide: Slide, totalSlides: number): string {
   `.trim();
 }
 
-function renderColumnsHtml(columnsSlot: ColumnsSlot): string {
+function renderColumnsHtml(columnsSlot: ColumnsSlot, options?: RenderHtmlOptions): string {
   const colCount = columnsSlot.columns.length;
   let gridStyle = `grid-template-columns: repeat(${colCount}, 1fr);`;
 
@@ -111,7 +115,7 @@ function renderColumnsHtml(columnsSlot: ColumnsSlot): string {
 
   const colsHtml = columnsSlot.columns
     .map((col) => {
-      const elementsHtml = col.elements.map(renderBlockElementHtml).join('\n');
+      const elementsHtml = col.elements.map((el) => renderBlockElementHtml(el, options)).join('\n');
       return `<div class="column-box">${elementsHtml}</div>`;
     })
     .join('\n');
@@ -119,7 +123,56 @@ function renderColumnsHtml(columnsSlot: ColumnsSlot): string {
   return `<div class="columns-container" style="${gridStyle}">\n${colsHtml}\n</div>`;
 }
 
-function renderBlockElementHtml(element: BlockElement): string {
+export function resolveLocalImageSrc(src: string, baseDir: string): string {
+  const trimmed = src.trim();
+  if (
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('data:')
+  ) {
+    return trimmed;
+  }
+
+  const queryIndex = trimmed.indexOf('?');
+  const hashIndex = trimmed.indexOf('#');
+  let cleanPath = trimmed;
+  if (queryIndex !== -1 || hashIndex !== -1) {
+    const splitIndex = Math.min(
+      queryIndex !== -1 ? queryIndex : Infinity,
+      hashIndex !== -1 ? hashIndex : Infinity
+    );
+    cleanPath = trimmed.slice(0, splitIndex);
+  }
+
+  const resolvedPath = path.isAbsolute(cleanPath)
+    ? cleanPath
+    : path.resolve(baseDir, cleanPath);
+
+  if (fs.existsSync(resolvedPath)) {
+    try {
+      const ext = path.extname(resolvedPath).toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.ico': 'image/x-icon',
+      };
+      const mime = mimeTypes[ext] || 'application/octet-stream';
+      const fileData = fs.readFileSync(resolvedPath);
+      return `data:${mime};base64,${fileData.toString('base64')}`;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  return trimmed;
+}
+
+function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptions): string {
   switch (element.type) {
     case 'heading': {
       const heading = element as HeadingBlock;
@@ -145,7 +198,13 @@ function renderBlockElementHtml(element: BlockElement): string {
 
     case 'image': {
       const img = element as ImageBlock;
-      return `<img class="slide-image" src="${escapeHtml(img.src)}" alt="${escapeHtml(img.alt)}" />`;
+      let resolvedSrc = img.src;
+      if (options?.resolveImageSrc) {
+        resolvedSrc = options.resolveImageSrc(img.src);
+      } else if (options?.baseDir) {
+        resolvedSrc = resolveLocalImageSrc(img.src, options.baseDir);
+      }
+      return `<img class="slide-image" src="${escapeHtml(resolvedSrc)}" alt="${escapeHtml(img.alt)}" />`;
     }
 
     case 'table': {

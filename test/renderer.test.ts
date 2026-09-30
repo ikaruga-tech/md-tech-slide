@@ -59,4 +59,29 @@ describe('renderer', () => {
 
     expect(html).toContain(`<script>\n${script}\n</script>`);
   });
+
+  it('resolves local relative image to Base64 data URI when baseDir is provided', () => {
+    const fixturePath = path.join(__dirname, 'fixtures', 'sample.md');
+    const source = fs.readFileSync(fixturePath, 'utf-8');
+    const deck = parseMarkdownToSlideDeck(source);
+
+    const html = renderDeckToHtml(deck, {
+      baseDir: path.join(__dirname, 'fixtures'),
+    });
+
+    expect(html).toContain('<img class="slide-image" src="data:image/png;base64,');
+    expect(html).toContain('alt="Architecture Diagram" />');
+  });
+
+  it('uses custom resolveImageSrc transformer when provided', () => {
+    const fixturePath = path.join(__dirname, 'fixtures', 'sample.md');
+    const source = fs.readFileSync(fixturePath, 'utf-8');
+    const deck = parseMarkdownToSlideDeck(source);
+
+    const html = renderDeckToHtml(deck, {
+      resolveImageSrc: (src) => `https://cdn.example.com/${src}`,
+    });
+
+    expect(html).toContain('<img class="slide-image" src="https://cdn.example.com/./images/architecture.png"');
+  });
 });
