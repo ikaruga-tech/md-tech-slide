@@ -1,0 +1,134 @@
+# ==========================
+# Generated files
+# ==========================
+
+generated/**
+!generated/
+!generated/**/
+!generated/**/.gitkeep
+
+# ==========================
+# Dependencies
+# ==========================
+
+node_modules/
+vscode-extension/node_modules/
+
+# ==========================
+# Build Output
+# ==========================
+
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+vscode-extension/dist/
+vscode-extension/out/
+.vscode-test/
+vscode-extension/.vscode-test/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+*.tsbuildinfo
+*.tgz
+
+# ==========================
+# Logs
+# ==========================
+
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================
+# Environment
+# ==========================
+
+.env
+.env.*
+!.env.example
+
+# ==========================
+# Playwright
+# ==========================
+
+playwright-report/
+test-results/
+
+# Browser binaries
+ms-playwright/
+
+# ==========================
+# Temporary Files
+# ==========================
+
+/tmp/
+/temp/
+.cache/
+scratch/
+*.vsix
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Linux
+*~
+
+# ==========================
+# IDE
+# ==========================
+
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+.idea/
+
+# ==========================
+# Generated PDFs and PPTX
+# ==========================
+
+*.pdf
+*.pptx
+output/
+
+# Keep sample PDFs and PPTX
+!examples/**/*.pdf
+!examples/**/*.pptx
+
+# ==========================
+# Generated Images
+# ==========================
+
+*.png
+*.svg
+
+# Keep sample images and extension media
+!media/**/*.png
+!media/**/*.svg
+!examples/**/*.png
+!examples/**/*.svg
+!test/fixtures/images/**/*.png
+!vscode-extension/media/**/*.png
+!vscode-extension/media/**/*.svg
+
+# ==========================
+# Package Manager
+# ==========================
+
+.pnpm-store/
+
+# ==========================
+# Local Configuration
+# ==========================
+
+.local/

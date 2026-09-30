@@ -1,0 +1,144 @@
+{
+  "name": "md-tech-slide",
+  "displayName": "md-tech-slide",
+  "version": "0.1.0",
+  "description": "Markdown to native PowerPoint presentation generator and previewer with flexible column layouts",
+  "publisher": "ikaruga-tech",
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ikaruga-tech/md-tech-slide.git"
+  },
+  "homepage": "https://github.com/ikaruga-tech/md-tech-slide#readme",
+  "bugs": {
+    "url": "https://github.com/ikaruga-tech/md-tech-slide/issues"
+  },
+  "categories": [
+    "Formatters",
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "markdown",
+    "slide",
+    "presentation",
+    "powerpoint",
+    "pptx",
+    "pdf"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "md-tech-slide.exportPPTX",
+        "title": "md-tech-slide: Export to PowerPoint (PPTX)"
+      },
+      {
+        "command": "md-tech-slide.exportPDF",
+        "title": "md-tech-slide: Export to PDF Slide"
+      },
+      {
+        "command": "md-tech-slide.openPreview",
+        "title": "md-tech-slide: Open Slide Preview",
+        "shortTitle": "Open Preview",
+        "icon": {
+          "light": "./media/preview-light.svg",
+          "dark": "./media/preview-dark.svg"
+        }
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "md-tech-slide.openPreview",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "md-tech-slide.openPreview",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "navigation@90"
+        },
+        {
+          "command": "md-tech-slide.exportPPTX",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "navigation@100"
+        },
+        {
+          "command": "md-tech-slide.exportPDF",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "navigation@101"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "md-tech-slide",
+      "properties": {
+        "mdTechSlide.defaultTheme": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "corporate",
+            "dark"
+          ],
+          "description": "Default theme for presentation slides"
+        },
+        "mdTechSlide.defaultAspectRatio": {
+          "type": "string",
+          "default": "16:9",
+          "enum": [
+            "16:9",
+            "4:3"
+          ],
+          "description": "Default aspect ratio for presentation slides"
+        }
+      }
+    },
+    "snippets": [
+      {
+        "language": "markdown",
+        "path": "./snippets/markdown.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.js --production",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package --no-dependencies",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "generate:sample": "tsx scripts/generate-sample.ts",
+    "generate:pdf": "tsx scripts/generate-pdf.ts"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "markdown-it-container": "^4.0.0",
+    "pptxgenjs": "^3.12.0",
+    "puppeteer-core": "^24.4.0",
+    "shiki": "^2.3.2",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.13.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

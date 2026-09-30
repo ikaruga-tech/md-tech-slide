@@ -1,0 +1,21 @@
+# Auto detect text files
+* text=auto eol=lf
+
+# Source code
+*.ts text
+*.tsx text
+*.js text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text
+
+# Documents
+*.pdf binary
