@@ -32,9 +32,10 @@ describe('renderer', () => {
     expect(html).toContain('Left Column (Main)');
     expect(html).toContain('Right Column (Side)');
 
-    // コードブロック検証
+    // コードブロック検証（シンタックスハイライト付き）
     expect(html).toContain('<pre class="code-block"><code class="language-typescript">');
-    expect(html).toContain('export interface SlideDeck');
+    expect(html).toContain('hl-keyword');
+    expect(html).toContain('SlideDeck');
 
     // 画像検証
     expect(html).toContain('<img class="slide-image" src="./images/architecture.png" alt="Architecture Diagram" />');
@@ -83,5 +84,42 @@ describe('renderer', () => {
     });
 
     expect(html).toContain('<img class="slide-image" src="https://cdn.example.com/./images/architecture.png"');
+  });
+
+  it('hides page numbers when paginate is false', () => {
+    const source = `---
+title: "No Pagination Deck"
+paginate: false
+---
+# Slide 1
+
+########
+
+## Slide 2
+Content
+`;
+    const deck = parseMarkdownToSlideDeck(source);
+    const html = renderDeckToHtml(deck);
+
+    expect(html).not.toContain('class="slide-footer"');
+  });
+
+  it('shows page numbers on content slides when paginate is true', () => {
+    const source = `---
+title: "Pagination Deck"
+paginate: true
+---
+# Slide 1 (Title)
+
+########
+
+## Slide 2 (Content)
+Content
+`;
+    const deck = parseMarkdownToSlideDeck(source);
+    const html = renderDeckToHtml(deck);
+
+    // 表紙（Title）には出ず、2枚目のコンテンツスライドに出る
+    expect(html).toContain('<div class="slide-footer">2 / 2</div>');
   });
 });

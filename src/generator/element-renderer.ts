@@ -19,57 +19,15 @@ export interface RenderOptions {
   readonly baseDir?: string;
 }
 
-function isPureTextElements(elements: readonly BlockElement[]): boolean {
-  return elements.every((el) => el.type === 'heading' || el.type === 'paragraph' || el.type === 'list');
-}
-
-function buildTextPropsFromBlocks(
-  elements: readonly BlockElement[],
-  theme: SlideTheme
-): Array<{ text: string; options?: Record<string, unknown> }> {
-  const props: Array<{ text: string; options?: Record<string, unknown> }> = [];
-
-  for (let i = 0; i < elements.length; i++) {
-    const el = elements[i];
-    if (!el) {
-      continue;
-    }
-
-    if (el.type === 'heading') {
-      const heading = el as HeadingBlock;
-      const fontSize = heading.level === 3 ? 20 : 18;
-      props.push({
-        text: heading.text,
-        options: {
-          fontSize,
-          fontFace: theme.fonts.heading,
-          color: theme.colors.title,
-          bold: true,
-          breakLine: true,
-        },
-      });
-    } else if (el.type === 'paragraph') {
-      const paragraph = el as ParagraphBlock;
-      for (const span of paragraph.spans) {
-        props.push({
-          text: span.text,
-          options: {
-            fontSize: 15,
-            fontFace: theme.fonts.body,
-            color: span.link ? theme.colors.accent : theme.colors.text,
-            bold: span.bold,
-            italic: span.italic,
-          },
-        });
-      }
-      props.push({ text: '\n', options: { fontSize: 10 } });
-    } else if (el.type === 'list') {
-      const list = el as ListBlock;
-      appendListItems(props, list.items, theme, 0);
+function countTotalListItems(items: readonly ListItem[]): number {
+  let count = 0;
+  for (const item of items) {
+    count++;
+    if (item.children && item.children.length > 0) {
+      count += countTotalListItems(item.children);
     }
   }
-
-  return props;
+  return count;
 }
 
 function appendListItems(
@@ -79,17 +37,38 @@ function appendListItems(
   indentLevel: number
 ): void {
   for (const item of items) {
-    const itemText = item.spans.map((s) => s.text).join('');
-    props.push({
-      text: itemText,
-      options: {
+    if (item.spans.length === 0) {
+      continue;
+    }
+
+    item.spans.forEach((span, sIdx) => {
+      const isFirst = sIdx === 0;
+      const isLast = sIdx === item.spans.length - 1;
+      const isCode = Boolean(span.code);
+      const opts: Record<string, unknown> = {
         fontSize: 15,
-        fontFace: theme.fonts.body,
-        color: theme.colors.text,
-        bullet: true,
-        indentLevel,
-        breakLine: true,
-      },
+        fontFace: isCode ? theme.fonts.code : theme.fonts.body,
+        color: span.link
+          ? theme.colors.accent
+          : isCode
+          ? (theme.name === 'dark' ? '38BDF8' : theme.colors.accent)
+          : theme.colors.text,
+        bold: isCode || span.bold,
+        italic: span.italic,
+      };
+
+      if (isFirst) {
+        opts.bullet = true;
+        opts.indentLevel = indentLevel;
+      }
+      if (isLast) {
+        opts.breakLine = true;
+      }
+
+      props.push({
+        text: span.text,
+        options: opts,
+      });
     });
 
     if (item.children && item.children.length > 0) {
@@ -109,63 +88,68 @@ export async function renderSlotElements(
     return;
   }
 
-  // テキスト要素のみの場合は 1 つの Text Frame にまとめて描画
-  if (isPureTextElements(elements)) {
-    const textProps = buildTextPropsFromBlocks(elements, theme);
-    slide.addText(textProps, {
-      x: rect.x,
-      y: rect.y,
-      w: rect.w,
-      h: rect.h,
-      fit: 'shrink',
-      valign: 'top',
-    });
-    return;
-  }
-
-  // 複合要素が含まれる場合はスタックモデルで上から順に配置
+  // すべての要素をスタックモデルで上から順に配置
   let currentY = rect.y;
-  const elementMargin = 0.2;
+  const elementMargin = 0.18;
 
   for (const el of elements) {
     if (currentY >= rect.y + rect.h) {
       break;
     }
 
-    const availableH = Math.max(0.5, rect.y + rect.h - currentY);
+    const availableH = Math.max(0.4, rect.y + rect.h - currentY);
 
     switch (el.type) {
       case 'heading': {
         const heading = el as HeadingBlock;
-        const h = 0.4;
+        const fontSize = heading.level === 3 ? 19 : 17;
+        const h = 0.38;
+
+        // 見出しの前に適度な上マージンを持たせる
+        if (currentY > rect.y) {
+          currentY += 0.08;
+        }
+
         slide.addText(heading.text, {
           x: rect.x,
           y: currentY,
           w: rect.w,
           h,
-          fontSize: heading.level === 3 ? 20 : 18,
+          fontSize,
           fontFace: theme.fonts.heading,
           color: theme.colors.title,
           bold: true,
           valign: 'top',
         });
-        currentY += h + elementMargin;
+        currentY += h + 0.12;
         break;
       }
 
       case 'paragraph': {
         const paragraph = el as ParagraphBlock;
-        const textProps = paragraph.spans.map((s) => ({
-          text: s.text,
-          options: {
-            fontSize: 15,
-            fontFace: theme.fonts.body,
-            color: s.link ? theme.colors.accent : theme.colors.text,
-            bold: s.bold,
-            italic: s.italic,
-          },
-        }));
-        const estimatedH = Math.min(availableH, Math.max(0.4, paragraph.spans.length * 0.25));
+        const textProps = paragraph.spans.map((s) => {
+          const isCode = Boolean(s.code);
+          return {
+            text: s.text,
+            options: {
+              fontSize: 15,
+              fontFace: isCode ? theme.fonts.code : theme.fonts.body,
+              color: s.link
+                ? theme.colors.accent
+                : isCode
+                ? (theme.name === 'dark' ? '38BDF8' : theme.colors.accent)
+                : theme.colors.text,
+              bold: isCode || s.bold,
+              italic: s.italic,
+            },
+          };
+        });
+
+        const totalChars = paragraph.spans.reduce((sum, s) => sum + s.text.length, 0);
+        const charsPerLine = Math.max(15, Math.floor(rect.w * 4.2));
+        const estimatedLines = Math.max(1, Math.ceil(totalChars / charsPerLine));
+        const estimatedH = Math.min(availableH, Math.max(0.32, estimatedLines * 0.28));
+
         slide.addText(textProps, {
           x: rect.x,
           y: currentY,
@@ -182,7 +166,10 @@ export async function renderSlotElements(
         const list = el as ListBlock;
         const textProps: Array<{ text: string; options?: Record<string, unknown> }> = [];
         appendListItems(textProps, list.items, theme, 0);
-        const estimatedH = Math.min(availableH, Math.max(0.5, list.items.length * 0.35));
+
+        const itemCount = countTotalListItems(list.items);
+        const estimatedH = Math.min(availableH, Math.max(0.35, itemCount * 0.32));
+
         slide.addText(textProps, {
           x: rect.x,
           y: currentY,
@@ -267,14 +254,14 @@ export async function renderSlotElements(
         const tableBlock = el as TableBlock;
         const tableRows: PptxTableCell[][] = [];
 
-        // ヘッダー行
+        // ヘッダー行（濃紺背景に鮮明な白文字）
         if (tableBlock.headers.length > 0) {
           tableRows.push(
             tableBlock.headers.map((h) => ({
               text: h,
               options: {
                 bold: true,
-                color: theme.colors.title,
+                color: 'FFFFFF',
                 fill: { color: theme.colors.codeBackground },
                 fontFace: theme.fonts.heading,
                 fontSize: 13,
@@ -283,17 +270,23 @@ export async function renderSlotElements(
           );
         }
 
-        // データ行
+        // データ行（バッククォート囲みコードは等幅フォント＋アクセント色）
         for (const row of tableBlock.rows) {
           tableRows.push(
-            row.map((cell) => ({
-              text: cell,
-              options: {
-                color: theme.colors.text,
-                fontFace: theme.fonts.body,
-                fontSize: 12,
-              },
-            }))
+            row.map((cell) => {
+              const trimmed = cell.trim();
+              const isCode = /^`([^`]+)`$/.test(trimmed);
+              const displayText = isCode ? trimmed.slice(1, -1) : cell;
+              return {
+                text: displayText,
+                options: {
+                  color: isCode ? (theme.name === 'dark' ? '38BDF8' : theme.colors.accent) : theme.colors.text,
+                  fontFace: isCode ? theme.fonts.code : theme.fonts.body,
+                  fontSize: 12,
+                  bold: isCode,
+                },
+              };
+            })
           );
         }
 

@@ -14,6 +14,7 @@ import { parseSingleBlock } from './block-parser.js';
 export function buildSlideFromTokens(tokens: readonly Token[], index: number): Slide {
   let header: HeaderSlot | undefined;
   let note: string | undefined;
+  let pageNumber: boolean | undefined;
   let bodySlot: BodySlot = { type: 'single', elements: [] };
 
   const rootElements: BlockElement[] = [];
@@ -34,8 +35,15 @@ export function buildSlideFromTokens(tokens: readonly Token[], index: number): S
       continue;
     }
 
-    // HTMLコメント形式のノート（<!-- note: 内容 -->）
+    // HTMLコメント形式のディレクティブ（<!-- paginate: true/false --> や <!-- note: 内容 -->）
     if (token.type === 'html_block') {
+      const pagMatch = token.content.match(/<!--\s*paginate:\s*(true|false)\s*-->/i);
+      if (pagMatch && pagMatch[1]) {
+        pageNumber = pagMatch[1].toLowerCase() === 'true';
+        i++;
+        continue;
+      }
+
       const match = token.content.match(/<!--\s*note:\s*([\s\S]*?)-->/i);
       if (match && match[1]) {
         note = match[1].trim();
@@ -81,6 +89,7 @@ export function buildSlideFromTokens(tokens: readonly Token[], index: number): S
   const slots: SlideSlots = {
     header,
     body: bodySlot,
+    footer: pageNumber !== undefined ? { pageNumber } : undefined,
   };
 
   const slideType: SlideType = index === 0 && (!header || rootElements.length === 0) ? 'title' : 'content';

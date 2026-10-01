@@ -11,7 +11,8 @@ export async function renderSlide(
   grid: SlideGrid,
   theme: SlideTheme,
   totalSlides: number,
-  options?: RenderOptions
+  options?: RenderOptions,
+  defaultPaginate: boolean = true
 ): Promise<void> {
   // スライド背景色
   slide.background = { color: theme.colors.background };
@@ -57,17 +58,24 @@ export async function renderSlide(
   }
 
   // Footer 領域（ページ番号）
-  const pageNumText = `${slideData.index + 1} / ${totalSlides}`;
-  slide.addText(pageNumText, {
-    x: grid.footer.x,
-    y: grid.footer.y,
-    w: grid.footer.w,
-    h: grid.footer.h,
-    fontSize: 10,
-    fontFace: theme.fonts.body,
-    color: theme.colors.muted,
-    align: 'right',
-  });
+  const isTitle = slideData.type === 'title';
+  const showPageNumber = slideData.slots.footer?.pageNumber !== undefined
+    ? slideData.slots.footer.pageNumber
+    : defaultPaginate && !isTitle;
+
+  if (showPageNumber) {
+    const pageNumText = `${slideData.index + 1} / ${totalSlides}`;
+    slide.addText(pageNumText, {
+      x: grid.footer.x,
+      y: grid.footer.y,
+      w: grid.footer.w,
+      h: grid.footer.h,
+      fontSize: 10,
+      fontFace: theme.fonts.body,
+      color: theme.colors.muted,
+      align: 'right',
+    });
+  }
 
   // スピーカーノート
   if (slideData.note && slideData.note.trim().length > 0) {

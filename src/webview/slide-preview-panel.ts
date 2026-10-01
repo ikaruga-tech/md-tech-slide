@@ -11,6 +11,10 @@ export class SlidePreviewPanel {
   private activeEditor: vscode.TextEditor | undefined;
   private lastScrollIndex = -1;
 
+  public get activeDocument(): vscode.TextDocument | undefined {
+    return this.activeEditor?.document;
+  }
+
   private constructor(panel: vscode.WebviewPanel, editor: vscode.TextEditor) {
     this.panel = panel;
     this.activeEditor = editor;

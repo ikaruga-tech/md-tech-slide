@@ -80,6 +80,23 @@
           "when": "resourceExtname == .md || resourceExtname == .markdown",
           "group": "navigation@101"
         }
+      ],
+      "editor/context": [
+        {
+          "command": "md-tech-slide.openPreview",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "1_modification@90"
+        },
+        {
+          "command": "md-tech-slide.exportPPTX",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "1_modification@100"
+        },
+        {
+          "command": "md-tech-slide.exportPDF",
+          "when": "resourceExtname == .md || resourceExtname == .markdown",
+          "group": "1_modification@101"
+        }
       ]
     },
     "configuration": {
@@ -121,7 +138,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "generate:sample": "tsx scripts/generate-sample.ts",
-    "generate:pdf": "tsx scripts/generate-pdf.ts"
+    "generate:pdf": "tsx scripts/generate-pdf.ts",
+    "generate:licenses": "node scripts/generate-licenses.js"
   },
   "dependencies": {
     "markdown-it": "^14.1.0",

@@ -44,4 +44,23 @@ describe('generator', () => {
     const stats = fs.statSync(outputPath);
     expect(stats.size).toBeGreaterThan(1000); // 正常なPPTXバイナリファイルサイズ
   });
+
+  it('generates presentation from examples/01.md with mixed text elements', async () => {
+    const examplePath = path.join(__dirname, '..', 'examples', '01.md');
+    const source = fs.readFileSync(examplePath, 'utf-8');
+    const deck = parseMarkdownToSlideDeck(source);
+
+    const exampleOutputPath = path.join(__dirname, '..', 'output', 'test_example01.pptx');
+    await savePresentationToFile(deck, exampleOutputPath, {
+      baseDir: path.dirname(examplePath),
+    });
+
+    expect(fs.existsSync(exampleOutputPath)).toBe(true);
+    const stats = fs.statSync(exampleOutputPath);
+    expect(stats.size).toBeGreaterThan(5000);
+
+    if (fs.existsSync(exampleOutputPath)) {
+      fs.unlinkSync(exampleOutputPath);
+    }
+  });
 });

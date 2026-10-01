@@ -7,8 +7,8 @@ export const DEFAULT_THEME: SlideTheme = {
     title: '1E293B',
     text: '334155',
     muted: '64748B',
-    codeBackground: 'F1F5F9',
-    codeText: '0F172A',
+    codeBackground: '1E293B',
+    codeText: 'F8FAFC',
     accent: '2563EB',
   },
   fonts: {
@@ -16,7 +16,7 @@ export const DEFAULT_THEME: SlideTheme = {
     body: 'Segoe UI',
     code: 'Consolas',
   },
-  shikiTheme: 'github-light',
+  shikiTheme: 'github-dark',
 };
 
 export const CORPORATE_THEME: SlideTheme = {
@@ -26,8 +26,8 @@ export const CORPORATE_THEME: SlideTheme = {
     title: '0F172A',
     text: '1E293B',
     muted: '475569',
-    codeBackground: 'E2E8F0',
-    codeText: '0F172A',
+    codeBackground: '1E293B',
+    codeText: 'F8FAFC',
     accent: '0369A1',
   },
   fonts: {
@@ -35,7 +35,7 @@ export const CORPORATE_THEME: SlideTheme = {
     body: 'Calibri',
     code: 'Consolas',
   },
-  shikiTheme: 'github-light',
+  shikiTheme: 'github-dark',
 };
 
 export const DARK_THEME: SlideTheme = {
@@ -45,7 +45,7 @@ export const DARK_THEME: SlideTheme = {
     title: 'F8FAFC',
     text: 'E2E8F0',
     muted: '94A3B8',
-    codeBackground: '1E293B',
+    codeBackground: '0B0F19',
     codeText: 'F8FAFC',
     accent: '38BDF8',
   },

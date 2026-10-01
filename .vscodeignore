@@ -7,6 +7,7 @@ output/**
 node_modules/**
 dist/**
 !dist/extension.cjs
+!THIRD_PARTY_LICENSES.txt
 .editorconfig
 .gitattributes
 .gitignore

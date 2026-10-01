@@ -17,6 +17,7 @@ import * as path from 'node:path';
 import { resolveTheme } from '../theme/index.js';
 import { escapeHtml } from './html-escape.js';
 import { generatePreviewCss } from './css-styles.js';
+import { highlightCodeToHtml } from './code-highlighter.js';
 
 export interface RenderHtmlOptions {
   readonly scriptContent?: string;
@@ -29,8 +30,10 @@ export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): 
   const theme = resolveTheme(deck.metadata.theme ? String(deck.metadata.theme) : undefined);
   const css = generatePreviewCss(theme, aspectRatio);
 
+  const defaultPaginate = deck.metadata.paginate !== false;
+
   const slidesHtml = deck.slides
-    .map((slide) => renderSingleSlideHtml(slide, deck.slides.length, options))
+    .map((slide) => renderSingleSlideHtml(slide, deck.slides.length, defaultPaginate, options))
     .join('\n');
 
   const clientScript = options?.scriptContent
@@ -54,7 +57,12 @@ ${clientScript}
 </html>`.trim();
 }
 
-function renderSingleSlideHtml(slide: Slide, totalSlides: number, options?: RenderHtmlOptions): string {
+function renderSingleSlideHtml(
+  slide: Slide,
+  totalSlides: number,
+  defaultPaginate: boolean,
+  options?: RenderHtmlOptions
+): string {
   const isTitle = slide.type === 'title';
   const cardClasses = `slide-card${isTitle ? ' title-slide' : ''}`;
 
@@ -75,7 +83,13 @@ function renderSingleSlideHtml(slide: Slide, totalSlides: number, options?: Rend
     bodyHtml = renderColumnsHtml(body, options);
   }
 
-  const footerHtml = `<div class="slide-footer">${slide.index + 1} / ${totalSlides}</div>`;
+  const showPageNumber = slide.slots.footer?.pageNumber !== undefined
+    ? slide.slots.footer.pageNumber
+    : defaultPaginate && !isTitle;
+
+  const footerHtml = showPageNumber
+    ? `<div class="slide-footer">${slide.index + 1} / ${totalSlides}</div>`
+    : '';
 
   let noteHtml = '';
   if (slide.note && slide.note.trim().length > 0) {
@@ -193,7 +207,8 @@ function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptio
     case 'code': {
       const code = element as CodeBlock;
       const langClass = code.language ? ` class="language-${escapeHtml(code.language)}"` : '';
-      return `<pre class="code-block"><code${langClass}>${escapeHtml(code.code)}</code></pre>`;
+      const highlighted = highlightCodeToHtml(code.code, code.language);
+      return `<pre class="code-block"><code${langClass}>${highlighted}</code></pre>`;
     }
 
     case 'image': {
@@ -214,11 +229,16 @@ function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptio
         thead = `<thead><tr>${tbl.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>`;
       }
       const tbody = `<tbody>${tbl.rows
-        .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`)
+        .map((row) => `<tr>${row.map((cell) => `<td>${renderTableCellHtml(cell)}</td>`).join('')}</tr>`)
         .join('')}</tbody>`;
       return `<table class="slide-table">${thead}${tbody}</table>`;
     }
   }
+}
+
+function renderTableCellHtml(text: string): string {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
 }
 
 function renderTextSpanHtml(span: TextSpan): string {

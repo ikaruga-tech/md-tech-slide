@@ -5,6 +5,49 @@ import { parseMarkdownToSlideDeck } from './parser/index.js';
 import { exportDeckToPptx, exportDeckToPdf } from './export/index.js';
 import { SlidePreviewPanel } from './webview/index.js';
 
+function isMarkdownDocument(doc: vscode.TextDocument): boolean {
+  return doc.languageId === 'markdown' || /\.md$/i.test(doc.fileName) || /\.markdown$/i.test(doc.fileName);
+}
+
+async function resolveTargetDocument(uri?: vscode.Uri): Promise<vscode.TextDocument | undefined> {
+  // 1. コマンド引数として URI が直接渡された場合（エクスプローラーの右クリックメニュー等）
+  if (uri && uri.fsPath) {
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      return doc;
+    } catch {
+      // 読み込みに失敗した場合は後続フォールバックへ
+    }
+  }
+
+  // 2. 現在アクティブなテキストエディタが Markdown ドキュメントの場合
+  const activeEditor = vscode.window.activeTextEditor;
+  if (activeEditor && isMarkdownDocument(activeEditor.document)) {
+    return activeEditor.document;
+  }
+
+  // 3. プレビューパネルが現在開いており、そのプレビュー対象ドキュメントがある場合
+  if (SlidePreviewPanel.currentPanel?.activeDocument && isMarkdownDocument(SlidePreviewPanel.currentPanel.activeDocument)) {
+    return SlidePreviewPanel.currentPanel.activeDocument;
+  }
+
+  // 4. 画面上に表示されているエディタ群（visibleTextEditors）の中に Markdown がある場合
+  for (const editor of vscode.window.visibleTextEditors) {
+    if (isMarkdownDocument(editor.document)) {
+      return editor.document;
+    }
+  }
+
+  // 5. ワークスペース内で最近開かれた Markdown ドキュメント
+  for (const doc of vscode.workspace.textDocuments) {
+    if (isMarkdownDocument(doc) && !doc.isClosed) {
+      return doc;
+    }
+  }
+
+  return undefined;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   // 1. スライド構文バリデーション機能の初期化
   const diagnosticProvider = new SlideDiagnosticProvider();
@@ -13,9 +56,21 @@ export function activate(context: vscode.ExtensionContext): void {
   // 2. プレビュー表示コマンドの登録
   const openPreviewCommand = vscode.commands.registerCommand(
     'md-tech-slide.openPreview',
-    () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'markdown') {
+    async (uri?: vscode.Uri) => {
+      let editor = vscode.window.activeTextEditor;
+
+      // エクスプローラー等から URI が渡された、または現在エディタが非 Markdown の場合
+      if (uri && uri.fsPath) {
+        const doc = await vscode.workspace.openTextDocument(uri);
+        editor = await vscode.window.showTextDocument(doc, { preview: false });
+      } else if (!editor || !isMarkdownDocument(editor.document)) {
+        const doc = await resolveTargetDocument();
+        if (doc) {
+          editor = await vscode.window.showTextDocument(doc, { preview: false });
+        }
+      }
+
+      if (!editor || !isMarkdownDocument(editor.document)) {
         vscode.window.showWarningMessage('Please open a Markdown file to view slide preview.');
         return;
       }
@@ -27,14 +82,13 @@ export function activate(context: vscode.ExtensionContext): void {
   // 3. PPTXエクスポートコマンドの登録
   const exportPPTXCommand = vscode.commands.registerCommand(
     'md-tech-slide.exportPPTX',
-    async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'markdown') {
+    async (uri?: vscode.Uri) => {
+      const document = await resolveTargetDocument(uri);
+      if (!document) {
         vscode.window.showWarningMessage('Please open a Markdown file to export presentation.');
         return;
       }
 
-      const document = editor.document;
       const docPath = document.uri.fsPath;
       const defaultUri = vscode.Uri.file(
         docPath ? docPath.replace(/\.md$/i, '.pptx') : 'presentation.pptx'
@@ -79,14 +133,13 @@ export function activate(context: vscode.ExtensionContext): void {
   // 4. PDFエクスポートコマンドの登録
   const exportPDFCommand = vscode.commands.registerCommand(
     'md-tech-slide.exportPDF',
-    async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'markdown') {
+    async (uri?: vscode.Uri) => {
+      const document = await resolveTargetDocument(uri);
+      if (!document) {
         vscode.window.showWarningMessage('Please open a Markdown file to export PDF presentation.');
         return;
       }
 
-      const document = editor.document;
       const docPath = document.uri.fsPath;
       const defaultUri = vscode.Uri.file(
         docPath ? docPath.replace(/\.md$/i, '.pdf') : 'presentation.pdf'
