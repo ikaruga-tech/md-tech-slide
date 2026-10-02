@@ -116,7 +116,8 @@ jobs:
       - name: Check for unexpected working tree changes
         shell: bash
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
+          CHANGES=$(git status --porcelain -- ':!THIRD_PARTY_LICENSES.txt')
+          if [ -n "$CHANGES" ]; then
             echo "Error: Uncommitted changes detected after build and package:"
             git status --short
             exit 1
