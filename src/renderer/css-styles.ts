@@ -223,6 +223,20 @@ img.slide-image {
   border-radius: 4px;
 }
 
+.slide-image-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px dashed rgba(239, 68, 68, 0.6);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 12px;
+  font-family: var(--font-code);
+  margin: 6px 0;
+}
+
 table.slide-table {
   width: 100%;
   border-collapse: collapse;

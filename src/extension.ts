@@ -4,9 +4,14 @@ import { SlideDiagnosticProvider } from './diagnostics/index.js';
 import { parseMarkdownToSlideDeck } from './parser/index.js';
 import { exportDeckToPptx, exportDeckToPdf } from './export/index.js';
 import { SlidePreviewPanel } from './webview/index.js';
+import { getAllowedResourceRoots } from './resource/index.js';
 
 function isMarkdownDocument(doc: vscode.TextDocument): boolean {
-  return doc.languageId === 'markdown' || /\.md$/i.test(doc.fileName) || /\.markdown$/i.test(doc.fileName);
+  return (
+    doc.languageId === 'markdown' ||
+    /\.md$/i.test(doc.fileName) ||
+    /\.markdown$/i.test(doc.fileName)
+  );
 }
 
 async function resolveTargetDocument(uri?: vscode.Uri): Promise<vscode.TextDocument | undefined> {
@@ -27,7 +32,10 @@ async function resolveTargetDocument(uri?: vscode.Uri): Promise<vscode.TextDocum
   }
 
   // 3. プレビューパネルが現在開いており、そのプレビュー対象ドキュメントがある場合
-  if (SlidePreviewPanel.currentPanel?.activeDocument && isMarkdownDocument(SlidePreviewPanel.currentPanel.activeDocument)) {
+  if (
+    SlidePreviewPanel.currentPanel?.activeDocument &&
+    isMarkdownDocument(SlidePreviewPanel.currentPanel.activeDocument)
+  ) {
     return SlidePreviewPanel.currentPanel.activeDocument;
   }
 
@@ -111,11 +119,20 @@ export function activate(context: vscode.ExtensionContext): void {
             cancellable: false,
           },
           async () => {
-            const markdown = document.getText();
-            const deck = parseMarkdownToSlideDeck(markdown);
-            const baseDir = docPath ? path.dirname(docPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const config = vscode.workspace.getConfiguration('mdTechSlide');
+            const defaultTheme = config.get<string>('defaultTheme') || 'default';
+            const defaultAspectRatio = config.get<string>('defaultAspectRatio') || '16:9';
 
-            await exportDeckToPptx(deck, targetUri.fsPath, { baseDir });
+            const markdown = document.getText();
+            const deck = parseMarkdownToSlideDeck(markdown, {
+              defaultTheme,
+              defaultAspectRatio,
+            });
+            const workspaceFolders = vscode.workspace.workspaceFolders?.map((wf) => wf.uri.fsPath);
+            const allowedRoots = getAllowedResourceRoots(docPath, workspaceFolders);
+            const baseDir = docPath ? path.dirname(docPath) : workspaceFolders?.[0];
+
+            await exportDeckToPptx(deck, targetUri.fsPath, { baseDir, allowedRoots });
           }
         );
 
@@ -162,11 +179,21 @@ export function activate(context: vscode.ExtensionContext): void {
             cancellable: false,
           },
           async () => {
-            const markdown = document.getText();
-            const deck = parseMarkdownToSlideDeck(markdown);
-            const baseDir = docPath ? path.dirname(docPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const config = vscode.workspace.getConfiguration('mdTechSlide');
+            const defaultTheme = config.get<string>('defaultTheme') || 'default';
+            const defaultAspectRatio = config.get<string>('defaultAspectRatio') || '16:9';
+            const browserPath = config.get<string>('export.browserPath')?.trim() || undefined;
 
-            await exportDeckToPdf(deck, targetUri.fsPath, { baseDir });
+            const markdown = document.getText();
+            const deck = parseMarkdownToSlideDeck(markdown, {
+              defaultTheme,
+              defaultAspectRatio,
+            });
+            const workspaceFolders = vscode.workspace.workspaceFolders?.map((wf) => wf.uri.fsPath);
+            const allowedRoots = getAllowedResourceRoots(docPath, workspaceFolders);
+            const baseDir = docPath ? path.dirname(docPath) : workspaceFolders?.[0];
+
+            await exportDeckToPdf(deck, targetUri.fsPath, { baseDir, allowedRoots, browserPath });
           }
         );
 

@@ -42,8 +42,8 @@ export function parseFrontmatter(source: string): FrontmatterResult {
     };
   } catch (err) {
     if (err instanceof Error) {
-      throw new Error(`Failed to parse Frontmatter YAML: ${err.message}`);
+      throw new Error(`Failed to parse Frontmatter YAML: ${err.message}`, { cause: err });
     }
-    throw new Error('Failed to parse Frontmatter YAML: unknown error.');
+    throw new Error('Failed to parse Frontmatter YAML: unknown error.', { cause: err });
   }
 }

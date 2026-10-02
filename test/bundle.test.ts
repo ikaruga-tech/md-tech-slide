@@ -65,6 +65,10 @@ describe('bundle and package metadata', () => {
 
   it('extension bundle exports activate and deactivate', () => {
     const bundlePath = path.resolve(__dirname, '../dist/extension.cjs');
+    if (!fs.existsSync(bundlePath)) {
+      const { execSync } = createRequire(import.meta.url)('node:child_process');
+      execSync('node esbuild.js', { cwd: path.resolve(__dirname, '..'), stdio: 'pipe' });
+    }
     expect(fs.existsSync(bundlePath)).toBe(true);
 
     const require = createRequire(import.meta.url);
@@ -101,10 +105,19 @@ describe('bundle and package metadata', () => {
           ProgressLocation: { Notification: 15 },
           DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
           Range: class {
-            constructor(public sl: number, public sc: number, public el: number, public ec: number) {}
+            constructor(
+              public sl: number,
+              public sc: number,
+              public el: number,
+              public ec: number
+            ) {}
           },
           Diagnostic: class {
-            constructor(public range: unknown, public message: string, public severity: unknown) {}
+            constructor(
+              public range: unknown,
+              public message: string,
+              public severity: unknown
+            ) {}
           },
         };
       }

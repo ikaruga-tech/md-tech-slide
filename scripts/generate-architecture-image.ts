@@ -122,7 +122,10 @@ async function main() {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 600, height: 340, deviceScaleFactor: 2 });
-    await page.setContent(`<!DOCTYPE html><html><body style="margin:0;padding:0;background:transparent;">${svg}</body></html>`, { waitUntil: 'load' });
+    await page.setContent(
+      `<!DOCTYPE html><html><body style="margin:0;padding:0;background:transparent;">${svg}</body></html>`,
+      { waitUntil: 'load' }
+    );
 
     const targetPaths = [
       path.resolve(__dirname, '../examples/images/architecture.png'),

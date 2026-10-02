@@ -8,6 +8,7 @@ export function createSlideMarkdownIt(): MarkdownIt {
     linkify: true,
   });
 
+  md.validateLink = () => true;
   md.use(slideContainerPlugin);
 
   return md;

@@ -2,4 +2,8 @@ dist
 node_modules
 generated
 coverage
+output
+*.vsix
+THIRD_PARTY_LICENSES.txt
+package-lock.json
 pnpm-lock.yaml

@@ -1,46 +1,43 @@
 import * as vscode from 'vscode';
 import { validateSlideSyntax } from '../validator/index.js';
+import { getAllowedResourceRoots } from '../resource/index.js';
+import { DiagnosticLifecycleManager } from './diagnostic-lifecycle.js';
 
 export class SlideDiagnosticProvider implements vscode.Disposable {
   private readonly collection: vscode.DiagnosticCollection;
-  private readonly disposables: vscode.Disposable[] = [];
-  private readonly debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly lifecycle = new DiagnosticLifecycleManager();
 
   constructor() {
     this.collection = vscode.languages.createDiagnosticCollection('md-tech-slide');
-    this.disposables.push(this.collection);
+    this.lifecycle.registerDisposable(this.collection);
 
     // ドキュメントを開いた時の検証
-    this.disposables.push(
+    this.lifecycle.registerDisposable(
       vscode.workspace.onDidOpenTextDocument((doc) => {
         this.updateDiagnostics(doc);
       })
     );
 
     // ドキュメント編集時の検証（300ms デバウンス）
-    this.disposables.push(
+    this.lifecycle.registerDisposable(
       vscode.workspace.onDidChangeTextDocument((e) => {
         this.debounceUpdate(e.document);
       })
     );
 
     // ドキュメント保存時の即時検証
-    this.disposables.push(
+    this.lifecycle.registerDisposable(
       vscode.workspace.onDidSaveTextDocument((doc) => {
         this.updateDiagnostics(doc);
       })
     );
 
     // ドキュメントを閉じた時の診断クリア
-    this.disposables.push(
+    this.lifecycle.registerDisposable(
       vscode.workspace.onDidCloseTextDocument((doc) => {
         this.collection.delete(doc.uri);
         const key = doc.uri.toString();
-        const timer = this.debounceTimers.get(key);
-        if (timer) {
-          clearTimeout(timer);
-          this.debounceTimers.delete(key);
-        }
+        this.lifecycle.clearDebounceTimer(key);
       })
     );
 
@@ -56,17 +53,13 @@ export class SlideDiagnosticProvider implements vscode.Disposable {
     }
 
     const key = document.uri.toString();
-    const existing = this.debounceTimers.get(key);
-    if (existing) {
-      clearTimeout(existing);
-    }
-
-    const timer = setTimeout(() => {
-      this.debounceTimers.delete(key);
-      this.updateDiagnostics(document);
-    }, 300);
-
-    this.debounceTimers.set(key, timer);
+    this.lifecycle.setDebounceTimer(
+      key,
+      () => {
+        this.updateDiagnostics(document);
+      },
+      300
+    );
   }
 
   public updateDiagnostics(document: vscode.TextDocument): void {
@@ -75,7 +68,14 @@ export class SlideDiagnosticProvider implements vscode.Disposable {
     }
 
     const text = document.getText();
-    const issues = validateSlideSyntax(text);
+    const sourceMarkdownPath = document.uri.scheme === 'file' ? document.uri.fsPath : undefined;
+    const workspaceFolders = vscode.workspace.workspaceFolders?.map((wf) => wf.uri.fsPath);
+    const allowedRoots = getAllowedResourceRoots(sourceMarkdownPath, workspaceFolders);
+
+    const issues = validateSlideSyntax(text, {
+      sourceMarkdownPath,
+      allowedRoots,
+    });
 
     const diagnostics: vscode.Diagnostic[] = issues.map((issue) => {
       const range = new vscode.Range(
@@ -104,12 +104,6 @@ export class SlideDiagnosticProvider implements vscode.Disposable {
   }
 
   public dispose(): void {
-    for (const timer of this.debounceTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.debounceTimers.clear();
-    for (const d of this.disposables) {
-      d.dispose();
-    }
+    this.lifecycle.dispose();
   }
 }

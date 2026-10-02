@@ -6,7 +6,8 @@
   "publisher": "ikaruga-tech",
   "icon": "media/icon.png",
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.90.0",
+    "node": ">=20 <25"
   },
   "type": "module",
   "main": "./dist/extension.cjs",
@@ -120,6 +121,11 @@
             "4:3"
           ],
           "description": "Default aspect ratio for presentation slides"
+        },
+        "mdTechSlide.export.browserPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom executable path for Google Chrome or Microsoft Edge used for PDF export"
         }
       }
     },
@@ -131,12 +137,19 @@
     ]
   },
   "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:pdf-e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:extension": "node -e \"import('fs').then(fs=>{fs.mkdirSync('generated/extension-test',{recursive:true});fs.writeFileSync('generated/extension-test/package.json','{\\\"type\\\":\\\"commonjs\\\"}')})\" && tsc -p tsconfig.test.json && node generated/extension-test/runTest.js",
     "vscode:prepublish": "node esbuild.js --production",
     "build": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "package": "vsce package --no-dependencies",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "package:vsix": "node scripts/package-vsix.js",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm run test:pdf-e2e && npm run test:extension && npm run package:vsix",
     "generate:sample": "tsx scripts/generate-sample.ts",
     "generate:pdf": "tsx scripts/generate-pdf.ts",
     "generate:licenses": "node scripts/generate-licenses.js"
@@ -150,13 +163,24 @@
     "yaml": "^2.7.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@puppeteer/browsers": "^2.13.2",
+    "@types/jszip": "^3.4.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.13.0",
+    "@types/pdf-parse": "^1.1.5",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
+    "eslint": "^10.11.0",
+    "jszip": "^3.10.2",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^2.4.5",
+    "prettier": "^3.9.9",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.71.0",
     "vitest": "^3.0.5"
   }
 }

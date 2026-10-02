@@ -48,12 +48,7 @@ export interface TableBlock {
 }
 
 export type BlockElement =
-  | HeadingBlock
-  | ParagraphBlock
-  | ListBlock
-  | CodeBlock
-  | ImageBlock
-  | TableBlock;
+  HeadingBlock | ParagraphBlock | ListBlock | CodeBlock | ImageBlock | TableBlock;
 
 export interface Column {
   readonly id: string;

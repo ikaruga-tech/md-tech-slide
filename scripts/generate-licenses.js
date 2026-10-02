@@ -7,11 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const LICENSE_FILE_PATTERNS = [
-  /^LICEN[CS]E(\..+)?$/i,
-  /^COPYING(\..+)?$/i,
-  /^NOTICE(\..+)?$/i,
-];
+const LICENSE_FILE_PATTERNS = [/^LICEN[CS]E(\..+)?$/i, /^COPYING(\..+)?$/i, /^NOTICE(\..+)?$/i];
 
 const STANDARD_LICENSES = {
   MIT: (author, year) => `MIT License
@@ -104,7 +100,7 @@ function extractLicenseId(pkg) {
   if (typeof pkg.license === 'string') return pkg.license;
   if (pkg.license && typeof pkg.license.type === 'string') return pkg.license.type;
   if (Array.isArray(pkg.licenses) && pkg.licenses.length > 0) {
-    return pkg.licenses.map(l => (typeof l === 'string' ? l : l.type)).join(', ');
+    return pkg.licenses.map((l) => (typeof l === 'string' ? l : l.type)).join(', ');
   }
   return 'Unknown';
 }
@@ -167,7 +163,6 @@ The notices, copyright statements, and license texts for these dependencies are
 provided below.
 
 Total bundled third-party packages: ${sortedPackages.length}
-Generated: ${new Date().toISOString()}
 `);
 
   for (const { dir, pkg } of sortedPackages) {
@@ -177,13 +172,13 @@ Generated: ${new Date().toISOString()}
     const repo = formatRepository(pkg.repository) || pkg.homepage || '';
     const author = formatAuthor(pkg.author);
 
-    let licenseContent = '';
+    let licenseContent;
     const files = fs.readdirSync(dir);
-    const licenseFiles = files.filter(f => LICENSE_FILE_PATTERNS.some(p => p.test(f)));
+    const licenseFiles = files.filter((f) => LICENSE_FILE_PATTERNS.some((p) => p.test(f)));
 
     if (licenseFiles.length > 0) {
       licenseContent = licenseFiles
-        .map(file => {
+        .map((file) => {
           const content = fs.readFileSync(path.join(dir, file), 'utf8').trim();
           return `[${file}]\n${content}`;
         })
@@ -208,7 +203,7 @@ Generated: ${new Date().toISOString()}
       licenseContent.trim(),
       '',
     ]
-      .filter(line => line !== null)
+      .filter((line) => line !== null)
       .join('\n');
 
     sections.push(packageBlock);
@@ -222,7 +217,7 @@ Generated: ${new Date().toISOString()}
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  generateThirdPartyLicenses().catch(err => {
+  generateThirdPartyLicenses().catch((err) => {
     console.error(err);
     process.exit(1);
   });
