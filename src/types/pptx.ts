@@ -19,7 +19,10 @@ export interface PptxSlide {
   addText(text: string | readonly unknown[], options?: Record<string, unknown>): PptxSlide;
   addShape(shapeName: string, options?: Record<string, unknown>): PptxSlide;
   addImage(options: Record<string, unknown>): PptxSlide;
-  addTable(tableRows: readonly (readonly PptxTableCell[])[], options?: Record<string, unknown>): PptxSlide;
+  addTable(
+    tableRows: readonly (readonly PptxTableCell[])[],
+    options?: Record<string, unknown>
+  ): PptxSlide;
   addNotes(noteText: string): PptxSlide;
 }
 

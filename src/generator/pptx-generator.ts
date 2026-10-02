@@ -9,11 +9,10 @@ import { renderSlide } from './slide-renderer.js';
 import type { RenderOptions } from './element-renderer.js';
 
 // NodeNext / CommonJS の相互運用のためコンストラクタを取得
-const PptxGenJSConstructor = (
-  typeof PptxGenJSModule === 'function'
-    ? PptxGenJSModule
-    : (PptxGenJSModule as unknown as { default: new () => PptxInstance }).default
-) as unknown as new () => PptxInstance;
+const PptxGenJSConstructor = (typeof PptxGenJSModule === 'function'
+  ? PptxGenJSModule
+  : (PptxGenJSModule as unknown as { default: new () => PptxInstance })
+      .default) as unknown as new () => PptxInstance;
 
 export async function generatePresentation(
   deck: SlideDeck,
@@ -42,6 +41,19 @@ export async function generatePresentation(
   }
 
   return pptx;
+}
+
+export async function generatePresentationWithDiagnostics(
+  deck: SlideDeck,
+  options?: RenderOptions
+): Promise<{
+  pptx: PptxInstance;
+  diagnostics: import('../layout/index.js').LayoutDiagnosticIssue[];
+}> {
+  const { analyzeLayoutOverflow } = await import('../layout/index.js');
+  const diagnostics = analyzeLayoutOverflow(deck);
+  const pptx = await generatePresentation(deck, options);
+  return { pptx, diagnostics };
 }
 
 export async function savePresentationToFile(

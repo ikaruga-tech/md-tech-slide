@@ -1,4 +1,5 @@
 import type { Rect, ColumnRect } from './types.js';
+import { parseColumnRatio } from './ratio.js';
 
 export function calculateColumnRects(
   bodyRect: Rect,
@@ -34,19 +35,11 @@ export function calculateColumnRects(
   let weights: number[];
 
   if (ratioStr && ratioStr.trim().length > 0) {
-    const parts = ratioStr.trim().split(':');
-    if (parts.length !== columnCount) {
-      throw new Error(
-        `Ratio "${ratioStr}" specifies ${parts.length} parts, but column count is ${columnCount}.`
-      );
+    const parsed = parseColumnRatio(ratioStr, columnCount);
+    if (!parsed.valid || !parsed.weights) {
+      throw new Error(parsed.error || `Invalid ratio "${ratioStr}" for ${columnCount} columns.`);
     }
-    weights = parts.map((p) => {
-      const num = parseFloat(p.trim());
-      if (Number.isNaN(num) || num <= 0) {
-        throw new Error(`Invalid ratio segment "${p}" in ratio "${ratioStr}". Must be positive number.`);
-      }
-      return num;
-    });
+    weights = [...parsed.weights];
   } else {
     weights = Array.from({ length: columnCount }, () => 1);
   }

@@ -1,4 +1,6 @@
-export function getSlideLineRanges(markdown: string): readonly { readonly startLine: number; readonly endLine: number }[] {
+export function getSlideLineRanges(
+  markdown: string
+): readonly { readonly startLine: number; readonly endLine: number }[] {
   const lines = markdown.split(/\r?\n/);
   const delimiterRegex = /^#{8,}\s*$/;
 

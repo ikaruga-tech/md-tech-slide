@@ -4,7 +4,15 @@ import { splitSlides } from './slide-splitter.js';
 import { createSlideMarkdownIt } from './markdown-it-setup.js';
 import { buildSlideFromTokens } from './slide-builder.js';
 
-export function parseMarkdownToSlideDeck(markdown: string): SlideDeck {
+export interface ParseDeckDefaults {
+  readonly defaultTheme?: string;
+  readonly defaultAspectRatio?: '16:9' | '4:3' | string;
+}
+
+export function parseMarkdownToSlideDeck(
+  markdown: string,
+  defaults?: ParseDeckDefaults
+): SlideDeck {
   const { metadata, content } = parseFrontmatter(markdown);
   const slideTexts = splitSlides(content);
   const md = createSlideMarkdownIt();
@@ -14,8 +22,18 @@ export function parseMarkdownToSlideDeck(markdown: string): SlideDeck {
     return buildSlideFromTokens(tokens, index);
   });
 
+  const rawRatio = metadata.aspectRatio ?? defaults?.defaultAspectRatio;
+  const validAspectRatio: '16:9' | '4:3' | undefined =
+    rawRatio === '4:3' ? '4:3' : rawRatio === '16:9' ? '16:9' : undefined;
+
+  const resolvedMetadata = {
+    ...metadata,
+    theme: metadata.theme ?? defaults?.defaultTheme,
+    aspectRatio: validAspectRatio,
+  };
+
   return {
-    metadata,
+    metadata: resolvedMetadata,
     slides,
   };
 }
@@ -28,3 +46,4 @@ export * from './inline-parser.js';
 export * from './block-parser.js';
 export * from './slide-builder.js';
 export * from './slide-locator.js';
+export * from './frontmatter-validator.js';

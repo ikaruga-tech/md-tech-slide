@@ -7,6 +7,7 @@ import { findInstalledBrowser } from './browser-finder.js';
 
 export interface PdfExportOptions {
   readonly baseDir?: string;
+  readonly allowedRoots?: readonly string[];
   readonly browserPath?: string;
 }
 
@@ -19,7 +20,7 @@ export async function exportDeckToPdf(
   if (!browserPath) {
     throw new Error(
       'Google Chrome or Microsoft Edge was not found on this system. ' +
-      'Please install Chrome or Edge to export PDF, or set the PUPPETEER_EXECUTABLE_PATH environment variable.'
+        'Please install Chrome or Edge to export PDF, or set the PUPPETEER_EXECUTABLE_PATH environment variable.'
     );
   }
 
@@ -27,7 +28,10 @@ export async function exportDeckToPdf(
   const widthIn = is4x3 ? '10in' : '13.333in';
   const heightIn = '7.5in';
 
-  const baseHtml = renderDeckToHtml(deck, { baseDir: options?.baseDir });
+  const baseHtml = renderDeckToHtml(deck, {
+    baseDir: options?.baseDir,
+    allowedRoots: options?.allowedRoots,
+  });
 
   // PDF出力専用のページサイズ・改ページCSSを注入
   const printCss = `

@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import { parseMarkdownToSlideDeck } from '../parser/index.js';
 import { renderDeckToHtml } from '../renderer/index.js';
 import { findSlideIndexByLine, findSlideStartLine } from '../parser/slide-locator.js';
+import { getAllowedResourceRoots } from '../resource/index.js';
+import type { SlideDeck } from '../types/ir.js';
 
 export class SlidePreviewPanel {
   public static currentPanel: SlidePreviewPanel | undefined;
@@ -10,6 +13,7 @@ export class SlidePreviewPanel {
   private readonly disposables: vscode.Disposable[] = [];
   private activeEditor: vscode.TextEditor | undefined;
   private lastScrollIndex = -1;
+  private currentDeck: SlideDeck | undefined;
 
   public get activeDocument(): vscode.TextDocument | undefined {
     return this.activeEditor?.document;
@@ -21,18 +25,31 @@ export class SlidePreviewPanel {
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 
-    // プレビュー側からのメッセージ受信（スライド選択 ➔ エディタ移動）
+    // プレビュー側からのメッセージ受信（スライド選択 / 外部リンク委譲）
     this.panel.webview.onDidReceiveMessage(
-      (message: { command: string; index: number }) => {
-        if (message.command === 'selectSlide' && this.activeEditor) {
+      (message: unknown) => {
+        if (!message || typeof message !== 'object') {
+          return;
+        }
+        const msg = message as Record<string, unknown>;
+
+        if (msg.command === 'selectSlide' && typeof msg.index === 'number' && this.activeEditor) {
           const doc = this.activeEditor.document;
-          const targetLine = findSlideStartLine(doc.getText(), message.index);
-          const pos = new vscode.Position(targetLine, 0);
-          this.activeEditor.selection = new vscode.Selection(pos, pos);
-          this.activeEditor.revealRange(
-            new vscode.Range(pos, pos),
-            vscode.TextEditorRevealType.InCenter
-          );
+          const maxSlides = this.currentDeck?.slides.length ?? Infinity;
+          if (msg.index >= 0 && msg.index < maxSlides) {
+            const targetLine = findSlideStartLine(doc.getText(), msg.index);
+            const pos = new vscode.Position(targetLine, 0);
+            this.activeEditor.selection = new vscode.Selection(pos, pos);
+            this.activeEditor.revealRange(
+              new vscode.Range(pos, pos),
+              vscode.TextEditorRevealType.InCenter
+            );
+          }
+        } else if (msg.command === 'openExternal' && typeof msg.url === 'string') {
+          const trimmedUrl = msg.url.trim();
+          if (/^(https?:|mailto:)/i.test(trimmedUrl)) {
+            vscode.env.openExternal(vscode.Uri.parse(trimmedUrl));
+          }
         }
       },
       null,
@@ -42,7 +59,10 @@ export class SlidePreviewPanel {
     this.updateContent();
   }
 
-  public static createOrShow(editor: vscode.TextEditor): SlidePreviewPanel {
+  public static createOrShow(
+    editor: vscode.TextEditor,
+    extensionUri?: vscode.Uri
+  ): SlidePreviewPanel {
     const column = vscode.ViewColumn.Beside;
 
     if (SlidePreviewPanel.currentPanel) {
@@ -52,25 +72,21 @@ export class SlidePreviewPanel {
       return SlidePreviewPanel.currentPanel;
     }
 
-    const localResourceRoots: vscode.Uri[] = [];
-    if (vscode.workspace.workspaceFolders) {
-      localResourceRoots.push(...vscode.workspace.workspaceFolders.map((f) => f.uri));
-    }
     const docUri = editor.document.uri;
-    if (docUri.scheme === 'file') {
-      localResourceRoots.push(vscode.Uri.file(path.dirname(docUri.fsPath)));
+    const sourceMarkdownPath = docUri.scheme === 'file' ? docUri.fsPath : undefined;
+    const workspaceFolders = vscode.workspace.workspaceFolders?.map((wf) => wf.uri.fsPath);
+    const allowedRoots = getAllowedResourceRoots(sourceMarkdownPath, workspaceFolders);
+
+    const localResourceRoots: vscode.Uri[] = allowedRoots.map((r) => vscode.Uri.file(r));
+    if (extensionUri) {
+      localResourceRoots.push(extensionUri);
     }
 
-    const panel = vscode.window.createWebviewPanel(
-      'mdTechSlidePreview',
-      'Slide Preview',
-      column,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots,
-      }
-    );
+    const panel = vscode.window.createWebviewPanel('mdTechSlidePreview', 'Slide Preview', column, {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots,
+    });
 
     SlidePreviewPanel.currentPanel = new SlidePreviewPanel(panel, editor);
     return SlidePreviewPanel.currentPanel;
@@ -87,11 +103,21 @@ export class SlidePreviewPanel {
 
     const markdown = this.activeEditor.document.getText();
     const deck = parseMarkdownToSlideDeck(markdown);
+    this.currentDeck = deck;
+
+    const nonce = crypto.randomBytes(16).toString('base64');
 
     const clientScript = `
       const vscode = acquireVsCodeApi();
 
       document.addEventListener('click', (e) => {
+        const link = e.target.closest('a');
+        if (link && link.href) {
+          e.preventDefault();
+          vscode.postMessage({ command: 'openExternal', url: link.href });
+          return;
+        }
+
         const container = e.target.closest('.slide-container');
         if (container) {
           const idx = parseInt(container.getAttribute('data-slide-index'), 10);
@@ -103,7 +129,7 @@ export class SlidePreviewPanel {
 
       window.addEventListener('message', (event) => {
         const msg = event.data;
-        if (msg.type === 'scrollToSlide') {
+        if (msg && msg.type === 'scrollToSlide' && typeof msg.index === 'number') {
           const container = document.querySelector('[data-slide-index="' + msg.index + '"]');
           if (container) {
             document.querySelectorAll('.slide-card').forEach(el => el.classList.remove('active'));
@@ -118,20 +144,22 @@ export class SlidePreviewPanel {
     `.trim();
 
     const docUri = this.activeEditor.document.uri;
-    const baseDir = docUri.scheme === 'file' ? path.dirname(docUri.fsPath) : undefined;
-    if (baseDir && docUri.scheme === 'file') {
-      this.panel.webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri),
-          vscode.Uri.file(baseDir),
-        ],
-      };
-    }
+    const sourceMarkdownPath = docUri.scheme === 'file' ? docUri.fsPath : undefined;
+    const workspaceFolders = vscode.workspace.workspaceFolders?.map((wf) => wf.uri.fsPath);
+    const allowedRoots = getAllowedResourceRoots(sourceMarkdownPath, workspaceFolders);
+    const baseDir = sourceMarkdownPath ? path.dirname(sourceMarkdownPath) : undefined;
+
+    this.panel.webview.options = {
+      enableScripts: true,
+      localResourceRoots: allowedRoots.map((r) => vscode.Uri.file(r)),
+    };
 
     const html = renderDeckToHtml(deck, {
       scriptContent: clientScript,
       baseDir,
+      allowedRoots,
+      nonce,
+      cspSource: this.panel.webview.cspSource,
     });
     this.panel.webview.html = html;
 

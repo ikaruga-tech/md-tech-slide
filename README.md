@@ -21,16 +21,25 @@ Unlike conventional Markdown slide converters that export slides as static flatt
 
 ## Markdown Syntax Guide
 
-### Slide Delimiter
+### Frontmatter Configuration
 
-Delimit consecutive slides using 8 consecutive hash characters (`########`) on an isolated line.
+Configure deck-wide metadata and defaults in the opening YAML block:
+
+| Key           | Type    | Default     | Description                                    |
+| :------------ | :------ | :---------- | :--------------------------------------------- |
+| `title`       | string  | `""`        | Presentation title                             |
+| `author`      | string  | `""`        | Presentation author                            |
+| `theme`       | string  | `"default"` | Visual theme (`default`, `corporate`, `dark`)  |
+| `aspectRatio` | string  | `"16:9"`    | Slide aspect ratio (`16:9`, `4:3`)             |
+| `paginate`    | boolean | `true`      | Show slide numbers in footer (`true`, `false`) |
 
 ```markdown
 ---
-title: "Sample Presentation"
-author: "Engineering Team"
-theme: "corporate"
-aspectRatio: "16:9"
+title: 'Sample Presentation'
+author: 'Engineering Team'
+theme: 'corporate'
+aspectRatio: '16:9'
+paginate: true
 ---
 
 # Title Slide
@@ -48,9 +57,10 @@ Slide body content goes here.
 
 Organize slide content into columns using `::: columns` and `::: column` blocks.
 
-```markdown
+````markdown
 ::: columns ratio="2:1"
 ::: column
+
 ### Left Column (Main)
 
 - Primary technical discussion
@@ -61,15 +71,19 @@ export interface SlideDeck {
   readonly slides: readonly Slide[];
 }
 ```
+````
+
 :::
 ::: column
+
 ### Right Column (Side)
 
 - Supplementary notes
 - Architecture summary
-:::
-:::
-```
+  :::
+  :::
+
+````
 
 ### Speaker Notes
 
@@ -79,7 +93,7 @@ Add presentation notes for each slide using `::: note` blocks or HTML comment no
 ::: note
 Explain the key architectural advantages of native text boxes over rasterized images.
 :::
-```
+````
 
 ---
 
@@ -117,11 +131,22 @@ Customize extension behavior through the VS Code Settings editor:
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `md-tech-slide.openPreview` | Open real-time slide preview for the current Markdown document |
-| `md-tech-slide.exportPPTX` | Export active Markdown presentation to PowerPoint (PPTX) format |
-| `md-tech-slide.exportPDF` | Export active Markdown presentation to PDF format |
+| Command                     | Description                                                     |
+| --------------------------- | --------------------------------------------------------------- |
+| `md-tech-slide.openPreview` | Open real-time slide preview for the current Markdown document  |
+| `md-tech-slide.exportPPTX`  | Export active Markdown presentation to PowerPoint (PPTX) format |
+| `md-tech-slide.exportPDF`   | Export active Markdown presentation to PDF format               |
+
+---
+
+## Security & Safe Resource Resolution
+
+md-tech-slide adheres to strict defense-in-depth principles:
+
+- Strict Content-Security-Policy (CSP): Webview previews forbid arbitrary external scripts and inline `style="..."` attributes, requiring cryptographic per-render nonces.
+- Traversal Protection: Local images and assets are strictly constrained within the active workspace roots. Directory traversal attacks (`../`) outside allowed roots are blocked.
+- Resource Safeguards: File size checks prevent reading files exceeding 20MB, and only whitelisted image formats (`.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`) are processed.
+- Link Sanitization: Dangerous URL schemes (such as `javascript:` and arbitrary local `file:`) in hyperlinks are stripped from preview frames and exports.
 
 ---
 

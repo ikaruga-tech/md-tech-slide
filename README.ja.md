@@ -21,16 +21,25 @@ md-tech-slide は、Markdown から技術プレゼンテーションスライド
 
 ## 記法ガイド
 
-### スライド区切り
+### Frontmatter 設定
 
-連続するスライドの境界には、独立した行に 8 連シャープ（`########`）を記述します。
+スライド全体のメタデータやデフォルト値は、Markdown 先頭の YAML ブロックで設定します。
+
+| キー          | 型      | デフォルト値 | 説明                                             |
+| :------------ | :------ | :----------- | :----------------------------------------------- |
+| `title`       | string  | `""`         | プレゼンテーションのタイトル                     |
+| `author`      | string  | `""`         | 発表者名                                         |
+| `theme`       | string  | `"default"`  | スライドテーマ（`default`, `corporate`, `dark`） |
+| `aspectRatio` | string  | `"16:9"`     | アスペクト比（`16:9`, `4:3`）                    |
+| `paginate`    | boolean | `true`       | フッターのページ番号表示（`true`, `false`）      |
 
 ```markdown
 ---
-title: "サンプルプレゼンテーション"
-author: "開発チーム"
-theme: "corporate"
-aspectRatio: "16:9"
+title: 'サンプルプレゼンテーション'
+author: '開発チーム'
+theme: 'corporate'
+aspectRatio: '16:9'
+paginate: true
 ---
 
 # タイトルスライド
@@ -48,9 +57,10 @@ md-tech-slide へようこそ。
 
 `::: columns` および `::: column` ブロックを用いてスライドをカラム分割できます。
 
-```markdown
+````markdown
 ::: columns ratio="2:1"
 ::: column
+
 ### 左カラム（メイン）
 
 - 主要な技術的議論
@@ -61,15 +71,19 @@ export interface SlideDeck {
   readonly slides: readonly Slide[];
 }
 ```
+````
+
 :::
 ::: column
+
 ### 右カラム（サイド）
 
 - 補足事項
 - アーキテクチャの要約
-:::
-:::
-```
+  :::
+  :::
+
+````
 
 ### スピーカーノート
 
@@ -79,7 +93,7 @@ export interface SlideDeck {
 ::: note
 画像化されたスライドに対するネイティブテキストボックスの編集上の利点を説明してください。
 :::
-```
+````
 
 ---
 
@@ -117,11 +131,22 @@ VS Code の設定画面から以下の動作をカスタマイズできます。
 
 ## 提供コマンド一覧
 
-| コマンド | 説明 |
-| --- | --- |
+| コマンド                    | 説明                                                           |
+| --------------------------- | -------------------------------------------------------------- |
 | `md-tech-slide.openPreview` | 現在開いている Markdown ドキュメントのスライドプレビューを表示 |
-| `md-tech-slide.exportPPTX` | 現在のスライドを PowerPoint（PPTX）形式でエクスポート |
-| `md-tech-slide.exportPDF` | 現在のスライドを PDF スライド形式でエクスポート |
+| `md-tech-slide.exportPPTX`  | 現在のスライドを PowerPoint（PPTX）形式でエクスポート          |
+| `md-tech-slide.exportPDF`   | 現在のスライドを PDF スライド形式でエクスポート                |
+
+---
+
+## セキュリティと安全設計
+
+md-tech-slide は厳格な多層防御アプローチを適用しています。
+
+- 厳格な Content-Security-Policy（CSP）: Webview プレビューでは外部スクリプトやインライン `style="..."` 属性の実行を全面遮断し、描画ごとの暗号学的 nonce を要求します。
+- パストラバーサル防止: スライドから参照されるローカル画像やリソースはワークスペース配下に厳密に制限され、許可範囲外（`../` 等）へのアクセスは遮断されます。
+- リソース保護: 20MBを超える過大なファイルの読み込みを防止し、ホワイトリストに登録された画像形式（`.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`）のみを処理します。
+- 危険なスキームの無害化: ハイパーリンク内の危険な URL スキーム（`javascript:` やローカル `file:` 等）はプレビューおよび出力時に自動的に無害化・排除されます。
 
 ---
 

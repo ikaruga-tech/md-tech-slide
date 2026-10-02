@@ -2,7 +2,7 @@ import type MarkdownIt from 'markdown-it';
 import type StateBlock from 'markdown-it/lib/rules_block/state_block.mjs';
 
 const SUPPORTED_CONTAINERS = ['columns', 'column', 'note'] as const;
-type SupportedContainer = typeof SUPPORTED_CONTAINERS[number];
+type SupportedContainer = (typeof SUPPORTED_CONTAINERS)[number];
 
 function getContainerName(params: string): SupportedContainer | null {
   const trimmed = params.trim();

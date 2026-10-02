@@ -42,11 +42,7 @@ export async function renderSlide(
   if (body.type === 'single') {
     await renderSlotElements(slide, body.elements, grid.body, theme, options);
   } else if (body.type === 'columns') {
-    const columnRects = calculateColumnRects(
-      grid.body,
-      body.columns.length,
-      body.ratio
-    );
+    const columnRects = calculateColumnRects(grid.body, body.columns.length, body.ratio);
 
     for (let i = 0; i < body.columns.length; i++) {
       const column = body.columns[i];
@@ -59,9 +55,10 @@ export async function renderSlide(
 
   // Footer 領域（ページ番号）
   const isTitle = slideData.type === 'title';
-  const showPageNumber = slideData.slots.footer?.pageNumber !== undefined
-    ? slideData.slots.footer.pageNumber
-    : defaultPaginate && !isTitle;
+  const showPageNumber =
+    slideData.slots.footer?.pageNumber !== undefined
+      ? slideData.slots.footer.pageNumber
+      : defaultPaginate && !isTitle;
 
   if (showPageNumber) {
     const pageNumText = `${slideData.index + 1} / ${totalSlides}`;

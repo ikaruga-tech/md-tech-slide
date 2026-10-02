@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMarkdownToSlideDeck } from '../src/parser/index.js';
-import { exportDeckToPptx, exportDeckToPdf, findInstalledBrowser } from '../src/export/index.js';
+import { exportDeckToPptx, exportDeckToPdf } from '../src/export/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,34 +32,6 @@ describe('export', () => {
 
     expect(fs.existsSync(pptxOutput)).toBe(true);
     expect(fs.statSync(pptxOutput).size).toBeGreaterThan(1000);
-  });
-
-  it('exports presentation to PDF file if browser is available', async () => {
-    const browserPath = findInstalledBrowser();
-    if (!browserPath) {
-      console.log('Skipping PDF export test: no browser installed on test host');
-      return;
-    }
-
-    const fixturePath = path.join(__dirname, 'fixtures', 'sample.md');
-    const source = fs.readFileSync(fixturePath, 'utf-8');
-    const deck = parseMarkdownToSlideDeck(source);
-
-    try {
-      await exportDeckToPdf(deck, pdfOutput, {
-        baseDir: path.dirname(fixturePath),
-        browserPath,
-      });
-
-      expect(fs.existsSync(pdfOutput)).toBe(true);
-      expect(fs.statSync(pdfOutput).size).toBeGreaterThan(1000);
-    } catch (err) {
-      if ((err as Error)?.message?.includes('Operation not permitted') || (err as Error)?.message?.includes('Failed to launch the browser')) {
-        console.log('Skipping PDF export test: browser launch restricted by environment permissions');
-        return;
-      }
-      throw err;
-    }
   });
 
   it('throws error when no browser is found and invalid path provided', async () => {

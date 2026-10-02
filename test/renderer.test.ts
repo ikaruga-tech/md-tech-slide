@@ -38,7 +38,9 @@ describe('renderer', () => {
     expect(html).toContain('SlideDeck');
 
     // 画像検証
-    expect(html).toContain('<img class="slide-image" src="./images/architecture.png" alt="Architecture Diagram" />');
+    expect(html).toContain(
+      '<img class="slide-image" src="./images/architecture.png" alt="Architecture Diagram" />'
+    );
 
     // テーブル検証
     expect(html).toContain('<table class="slide-table">');
@@ -83,7 +85,9 @@ describe('renderer', () => {
       resolveImageSrc: (src) => `https://cdn.example.com/${src}`,
     });
 
-    expect(html).toContain('<img class="slide-image" src="https://cdn.example.com/./images/architecture.png"');
+    expect(html).toContain(
+      '<img class="slide-image" src="https://cdn.example.com/./images/architecture.png"'
+    );
   });
 
   it('hides page numbers when paginate is false', () => {

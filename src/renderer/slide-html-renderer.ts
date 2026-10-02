@@ -12,32 +12,57 @@ import type {
   TextSpan,
   ColumnsSlot,
 } from '../types/ir.js';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { resolveTheme } from '../theme/index.js';
 import { escapeHtml } from './html-escape.js';
 import { generatePreviewCss } from './css-styles.js';
 import { highlightCodeToHtml } from './code-highlighter.js';
+import { resolveLocalResource } from '../resource/index.js';
+import { parseColumnRatio } from '../layout/index.js';
 
 export interface RenderHtmlOptions {
   readonly scriptContent?: string;
   readonly baseDir?: string;
+  readonly allowedRoots?: readonly string[];
   readonly resolveImageSrc?: (src: string) => string;
+  readonly nonce?: string;
+  readonly cspSource?: string;
+}
+
+interface RenderContext {
+  readonly options?: RenderHtmlOptions;
+  readonly dynamicStyles: Map<string, string>;
 }
 
 export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): string {
   const aspectRatio = deck.metadata.aspectRatio === '4:3' ? '4:3' : '16:9';
   const theme = resolveTheme(deck.metadata.theme ? String(deck.metadata.theme) : undefined);
-  const css = generatePreviewCss(theme, aspectRatio);
+  const baseCss = generatePreviewCss(theme, aspectRatio);
 
   const defaultPaginate = deck.metadata.paginate !== false;
+  const context: RenderContext = {
+    options,
+    dynamicStyles: new Map(),
+  };
 
   const slidesHtml = deck.slides
-    .map((slide) => renderSingleSlideHtml(slide, deck.slides.length, defaultPaginate, options))
+    .map((slide) => renderSingleSlideHtml(slide, deck.slides.length, defaultPaginate, context))
     .join('\n');
 
+  const nonceAttr = options?.nonce ? ` nonce="${escapeHtml(options.nonce)}"` : '';
+
+  const cspMeta =
+    options?.cspSource && options?.nonce
+      ? `  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${options.cspSource} data:; style-src ${options.cspSource} 'nonce-${options.nonce}'; script-src ${options.cspSource} 'nonce-${options.nonce}';">\n`
+      : '';
+
+  const dynamicCss = Array.from(context.dynamicStyles.values()).join('\n');
+  const fullCss = dynamicCss
+    ? `${baseCss}\n/* Dynamic grid layout classes */\n${dynamicCss}`
+    : baseCss;
+
   const clientScript = options?.scriptContent
-    ? `<script>\n${options.scriptContent}\n</script>`
+    ? `<script${nonceAttr}>\n${options.scriptContent}\n</script>`
     : '';
 
   return `<!DOCTYPE html>
@@ -45,9 +70,9 @@ export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(deck.metadata.title ? String(deck.metadata.title) : 'Presentation Preview')}</title>
-  <style>
-${css}
+${cspMeta}  <title>${escapeHtml(deck.metadata.title ? String(deck.metadata.title) : 'Presentation Preview')}</title>
+  <style${nonceAttr}>
+${fullCss}
   </style>
 </head>
 <body>
@@ -61,7 +86,7 @@ function renderSingleSlideHtml(
   slide: Slide,
   totalSlides: number,
   defaultPaginate: boolean,
-  options?: RenderHtmlOptions
+  context: RenderContext
 ): string {
   const isTitle = slide.type === 'title';
   const cardClasses = `slide-card${isTitle ? ' title-slide' : ''}`;
@@ -78,14 +103,15 @@ function renderSingleSlideHtml(
   let bodyHtml = '';
   const body = slide.slots.body;
   if (body.type === 'single') {
-    bodyHtml = body.elements.map((el) => renderBlockElementHtml(el, options)).join('\n');
+    bodyHtml = body.elements.map((el) => renderBlockElementHtml(el, context)).join('\n');
   } else if (body.type === 'columns') {
-    bodyHtml = renderColumnsHtml(body, options);
+    bodyHtml = renderColumnsHtml(body, context);
   }
 
-  const showPageNumber = slide.slots.footer?.pageNumber !== undefined
-    ? slide.slots.footer.pageNumber
-    : defaultPaginate && !isTitle;
+  const showPageNumber =
+    slide.slots.footer?.pageNumber !== undefined
+      ? slide.slots.footer.pageNumber
+      : defaultPaginate && !isTitle;
 
   const footerHtml = showPageNumber
     ? `<div class="slide-footer">${slide.index + 1} / ${totalSlides}</div>`
@@ -115,36 +141,62 @@ function renderSingleSlideHtml(
   `.trim();
 }
 
-function renderColumnsHtml(columnsSlot: ColumnsSlot, options?: RenderHtmlOptions): string {
+function renderColumnsHtml(columnsSlot: ColumnsSlot, context: RenderContext): string {
   const colCount = columnsSlot.columns.length;
-  let gridStyle = `grid-template-columns: repeat(${colCount}, 1fr);`;
+  let ratioClass = '';
 
   if (columnsSlot.ratio) {
-    const parts = columnsSlot.ratio.split(':');
-    if (parts.length === colCount) {
-      const frSegments = parts.map((p) => `${p.trim()}fr`).join(' ');
-      gridStyle = `grid-template-columns: ${frSegments};`;
+    const parsed = parseColumnRatio(columnsSlot.ratio, colCount);
+    if (parsed.valid && parsed.frSegments && parsed.cssClassName) {
+      ratioClass = parsed.cssClassName;
+      if (!context.dynamicStyles.has(ratioClass)) {
+        context.dynamicStyles.set(
+          ratioClass,
+          `.columns-container.${ratioClass} { grid-template-columns: ${parsed.frSegments.join(' ')}; }`
+        );
+      }
     }
   }
 
+  const defaultColClass = `cols-count-${colCount}`;
+  if (!ratioClass && !context.dynamicStyles.has(defaultColClass)) {
+    context.dynamicStyles.set(
+      defaultColClass,
+      `.columns-container.${defaultColClass} { grid-template-columns: repeat(${colCount}, 1fr); }`
+    );
+  }
+
+  const gridClass = ratioClass ? `${defaultColClass} ${ratioClass}` : defaultColClass;
+
   const colsHtml = columnsSlot.columns
     .map((col) => {
-      const elementsHtml = col.elements.map((el) => renderBlockElementHtml(el, options)).join('\n');
+      const elementsHtml = col.elements.map((el) => renderBlockElementHtml(el, context)).join('\n');
       return `<div class="column-box">${elementsHtml}</div>`;
     })
     .join('\n');
 
-  return `<div class="columns-container" style="${gridStyle}">\n${colsHtml}\n</div>`;
+  return `<div class="columns-container ${gridClass}">\n${colsHtml}\n</div>`;
 }
 
-export function resolveLocalImageSrc(src: string, baseDir: string): string {
+export interface ResolveImageResult {
+  readonly success: boolean;
+  readonly src?: string;
+  readonly errorName?: string;
+  readonly errorMessage?: string;
+}
+
+export function resolveLocalImageSrc(
+  src: string,
+  baseDir: string,
+  allowedRoots?: readonly string[]
+): ResolveImageResult {
   const trimmed = src.trim();
   if (
     trimmed.startsWith('https://') ||
     trimmed.startsWith('http://') ||
     trimmed.startsWith('data:')
   ) {
-    return trimmed;
+    return { success: true, src: trimmed };
   }
 
   const queryIndex = trimmed.indexOf('?');
@@ -158,35 +210,26 @@ export function resolveLocalImageSrc(src: string, baseDir: string): string {
     cleanPath = trimmed.slice(0, splitIndex);
   }
 
-  const resolvedPath = path.isAbsolute(cleanPath)
-    ? cleanPath
-    : path.resolve(baseDir, cleanPath);
-
-  if (fs.existsSync(resolvedPath)) {
-    try {
-      const ext = path.extname(resolvedPath).toLowerCase();
-      const mimeTypes: Record<string, string> = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.svg': 'image/svg+xml',
-        '.webp': 'image/webp',
-        '.bmp': 'image/bmp',
-        '.ico': 'image/x-icon',
-      };
-      const mime = mimeTypes[ext] || 'application/octet-stream';
-      const fileData = fs.readFileSync(resolvedPath);
-      return `data:${mime};base64,${fileData.toString('base64')}`;
-    } catch {
-      return trimmed;
-    }
+  try {
+    const resolved = resolveLocalResource({
+      resourcePath: cleanPath,
+      allowedRoots: allowedRoots ?? [baseDir],
+      sourceMarkdownPath: path.join(baseDir, 'dummy.md'),
+    });
+    return { success: true, src: resolved.toDataUri() };
+  } catch (err) {
+    const errorName = err instanceof Error ? err.name : 'ResourceError';
+    const filename = path.basename(cleanPath);
+    return {
+      success: false,
+      errorName,
+      errorMessage: `${errorName}: ${filename}`,
+    };
   }
-
-  return trimmed;
 }
 
-function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptions): string {
+function renderBlockElementHtml(element: BlockElement, context: RenderContext): string {
+  const options = context.options;
   switch (element.type) {
     case 'heading': {
       const heading = element as HeadingBlock;
@@ -194,8 +237,8 @@ function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptio
     }
 
     case 'paragraph': {
-      const p = element as ParagraphBlock;
-      const spansHtml = p.spans.map(renderTextSpanHtml).join('');
+      const para = element as ParagraphBlock;
+      const spansHtml = para.spans.map(renderTextSpanHtml).join('');
       return `<p>${spansHtml}</p>`;
     }
 
@@ -207,19 +250,27 @@ function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptio
     case 'code': {
       const code = element as CodeBlock;
       const langClass = code.language ? ` class="language-${escapeHtml(code.language)}"` : '';
-      const highlighted = highlightCodeToHtml(code.code, code.language);
-      return `<pre class="code-block"><code${langClass}>${highlighted}</code></pre>`;
+      const highlightedHtml = highlightCodeToHtml(code.code, code.language);
+      return `<pre class="code-block"><code${langClass}>${highlightedHtml}</code></pre>`;
     }
 
     case 'image': {
       const img = element as ImageBlock;
-      let resolvedSrc = img.src;
       if (options?.resolveImageSrc) {
-        resolvedSrc = options.resolveImageSrc(img.src);
-      } else if (options?.baseDir) {
-        resolvedSrc = resolveLocalImageSrc(img.src, options.baseDir);
+        const customSrc = options.resolveImageSrc(img.src);
+        return `<img class="slide-image" src="${escapeHtml(customSrc)}" alt="${escapeHtml(img.alt)}" />`;
       }
-      return `<img class="slide-image" src="${escapeHtml(resolvedSrc)}" alt="${escapeHtml(img.alt)}" />`;
+      if (options?.baseDir) {
+        const result = resolveLocalImageSrc(img.src, options.baseDir, options.allowedRoots);
+        if (result.success && result.src) {
+          return `<img class="slide-image" src="${escapeHtml(result.src)}" alt="${escapeHtml(img.alt)}" />`;
+        }
+        const safeError = result.errorMessage
+          ? escapeHtml(result.errorMessage)
+          : 'Image Load Error';
+        return `<div class="slide-image-error" role="alert"><span>Image Error: ${safeError}</span></div>`;
+      }
+      return `<img class="slide-image" src="${escapeHtml(img.src)}" alt="${escapeHtml(img.alt)}" />`;
     }
 
     case 'table': {
@@ -229,7 +280,9 @@ function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptio
         thead = `<thead><tr>${tbl.headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>`;
       }
       const tbody = `<tbody>${tbl.rows
-        .map((row) => `<tr>${row.map((cell) => `<td>${renderTableCellHtml(cell)}</td>`).join('')}</tr>`)
+        .map(
+          (row) => `<tr>${row.map((cell) => `<td>${renderTableCellHtml(cell)}</td>`).join('')}</tr>`
+        )
         .join('')}</tbody>`;
       return `<table class="slide-table">${thead}${tbody}</table>`;
     }
@@ -239,6 +292,14 @@ function renderBlockElementHtml(element: BlockElement, options?: RenderHtmlOptio
 function renderTableCellHtml(text: string): string {
   const escaped = escapeHtml(text);
   return escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+}
+
+function sanitizeLink(href: string): string | undefined {
+  const trimmed = href.trim();
+  if (/^(https?:|mailto:)/i.test(trimmed)) {
+    return trimmed;
+  }
+  return undefined;
 }
 
 function renderTextSpanHtml(span: TextSpan): string {
@@ -253,7 +314,10 @@ function renderTextSpanHtml(span: TextSpan): string {
     text = `<em>${text}</em>`;
   }
   if (span.link) {
-    text = `<a href="${escapeHtml(span.link)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    const safeHref = sanitizeLink(span.link);
+    if (safeHref) {
+      text = `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+    }
   }
   return text;
 }
@@ -263,7 +327,8 @@ function renderListHtml(items: readonly ListItem[], ordered: boolean): string {
   const itemsHtml = items
     .map((item) => {
       const text = item.spans.map(renderTextSpanHtml).join('');
-      const childHtml = item.children && item.children.length > 0 ? renderListHtml(item.children, ordered) : '';
+      const childHtml =
+        item.children && item.children.length > 0 ? renderListHtml(item.children, ordered) : '';
       return `<li>${text}${childHtml}</li>`;
     })
     .join('');

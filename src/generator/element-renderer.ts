@@ -1,4 +1,3 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type {
   BlockElement,
@@ -14,9 +13,11 @@ import type { PptxSlide, PptxTableCell } from '../types/pptx.js';
 import type { SlideTheme } from '../theme/types.js';
 import type { Rect } from '../layout/types.js';
 import { highlightCodeToTextProps } from './syntax-highlighter.js';
+import { resolveLocalResource } from '../resource/index.js';
 
 export interface RenderOptions {
   readonly baseDir?: string;
+  readonly allowedRoots?: readonly string[];
 }
 
 function countTotalListItems(items: readonly ListItem[]): number {
@@ -51,8 +52,10 @@ function appendListItems(
         color: span.link
           ? theme.colors.accent
           : isCode
-          ? (theme.name === 'dark' ? '38BDF8' : theme.colors.accent)
-          : theme.colors.text,
+            ? theme.name === 'dark'
+              ? '38BDF8'
+              : theme.colors.accent
+            : theme.colors.text,
         bold: isCode || span.bold,
         italic: span.italic,
       };
@@ -137,8 +140,10 @@ export async function renderSlotElements(
               color: s.link
                 ? theme.colors.accent
                 : isCode
-                ? (theme.name === 'dark' ? '38BDF8' : theme.colors.accent)
-                : theme.colors.text,
+                  ? theme.name === 'dark'
+                    ? '38BDF8'
+                    : theme.colors.accent
+                  : theme.colors.text,
               bold: isCode || s.bold,
               italic: s.italic,
             },
@@ -229,13 +234,13 @@ export async function renderSlotElements(
         const isDataUri = /^data:/i.test(resolvedPath);
 
         if (!isUrl && !isDataUri) {
-          if (!path.isAbsolute(resolvedPath)) {
-            const base = options?.baseDir ?? process.cwd();
-            resolvedPath = path.resolve(base, resolvedPath);
-          }
-          if (!fs.existsSync(resolvedPath)) {
-            throw new Error(`Image not found at path: ${resolvedPath} (referenced as "${imageBlock.src}")`);
-          }
+          const base = options?.baseDir ?? process.cwd();
+          const resolved = resolveLocalResource({
+            resourcePath: imageBlock.src,
+            allowedRoots: options?.allowedRoots ?? [base],
+            sourceMarkdownPath: path.join(base, 'index.md'),
+          });
+          resolvedPath = resolved.absolutePath;
         }
 
         slide.addImage({
@@ -280,7 +285,11 @@ export async function renderSlotElements(
               return {
                 text: displayText,
                 options: {
-                  color: isCode ? (theme.name === 'dark' ? '38BDF8' : theme.colors.accent) : theme.colors.text,
+                  color: isCode
+                    ? theme.name === 'dark'
+                      ? '38BDF8'
+                      : theme.colors.accent
+                    : theme.colors.text,
                   fontFace: isCode ? theme.fonts.code : theme.fonts.body,
                   fontSize: 12,
                   bold: isCode,

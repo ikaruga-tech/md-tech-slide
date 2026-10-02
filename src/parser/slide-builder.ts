@@ -92,7 +92,7 @@ export function buildSlideFromTokens(tokens: readonly Token[], index: number): S
     footer: pageNumber !== undefined ? { pageNumber } : undefined,
   };
 
-  const slideType: SlideType = index === 0 && (!header || rootElements.length === 0) ? 'title' : 'content';
+  const slideType: SlideType = index === 0 ? 'title' : 'content';
 
   return {
     index,

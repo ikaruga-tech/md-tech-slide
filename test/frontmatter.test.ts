@@ -29,7 +29,9 @@ aspectRatio: "16:9"
 title: "Unclosed"
 # No closing delimiter`;
 
-    expect(() => parseFrontmatter(input)).toThrow('Frontmatter is opened with "---" but not closed with "---".');
+    expect(() => parseFrontmatter(input)).toThrow(
+      'Frontmatter is opened with "---" but not closed with "---".'
+    );
   });
 
   it('throws error when frontmatter contains invalid YAML', () => {

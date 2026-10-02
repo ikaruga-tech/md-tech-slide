@@ -101,10 +101,19 @@ describe('bundle and package metadata', () => {
           ProgressLocation: { Notification: 15 },
           DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
           Range: class {
-            constructor(public sl: number, public sc: number, public el: number, public ec: number) {}
+            constructor(
+              public sl: number,
+              public sc: number,
+              public el: number,
+              public ec: number
+            ) {}
           },
           Diagnostic: class {
-            constructor(public range: unknown, public message: string, public severity: unknown) {}
+            constructor(
+              public range: unknown,
+              public message: string,
+              public severity: unknown
+            ) {}
           },
         };
       }

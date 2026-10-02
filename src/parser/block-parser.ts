@@ -15,7 +15,10 @@ export interface BlockParseResult {
   readonly nextIndex: number;
 }
 
-export function parseList(tokens: readonly Token[], startIndex: number): { block: ListBlock; nextIndex: number } {
+export function parseList(
+  tokens: readonly Token[],
+  startIndex: number
+): { block: ListBlock; nextIndex: number } {
   const openToken = tokens[startIndex];
   if (!openToken) {
     throw new Error('Unexpected end of tokens while parsing list.');
@@ -95,7 +98,10 @@ export function parseList(tokens: readonly Token[], startIndex: number): { block
   };
 }
 
-export function parseTable(tokens: readonly Token[], startIndex: number): { block: TableBlock; nextIndex: number } {
+export function parseTable(
+  tokens: readonly Token[],
+  startIndex: number
+): { block: TableBlock; nextIndex: number } {
   let i = startIndex + 1;
   const headers: string[] = [];
   const rows: string[][] = [];
@@ -155,7 +161,10 @@ export function parseTable(tokens: readonly Token[], startIndex: number): { bloc
   };
 }
 
-export function parseSingleBlock(tokens: readonly Token[], index: number): { elements: readonly BlockElement[]; nextIndex: number } {
+export function parseSingleBlock(
+  tokens: readonly Token[],
+  index: number
+): { elements: readonly BlockElement[]; nextIndex: number } {
   const token = tokens[index];
   if (!token) {
     return { elements: [], nextIndex: index };

@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-linux:
+    name: Linux (Ubuntu) - Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22, 24]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install system dependencies (Xvfb & Chromium libraries)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Cache Chrome for Testing
+        id: cache-chrome
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/chrome
+          key: chrome-${{ runner.os }}-128.0.6613.119
+
+      - name: Install Chrome for Testing
+        if: steps.cache-chrome.outputs.cache-hit != 'true'
+        run: npx --no-install @puppeteer/browsers install chrome@128.0.6613.119 --path ${{ github.workspace }}/.cache/chrome
+
+      - name: Resolve Chrome executable path and verify
+        run: |
+          CHROME_PATH=$(node scripts/resolve-chrome.js)
+          echo "Resolved Chrome Path: $CHROME_PATH"
+          if [ ! -x "$CHROME_PATH" ]; then
+            echo "Error: Resolved Chrome executable not found or not executable: $CHROME_PATH"
+            exit 1
+          fi
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Check code formatting
+        run: npm run format:check
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Run unit and structural tests
+        run: npm test
+
+      - name: Run PDF E2E tests
+        run: npm run test:pdf-e2e
+        env:
+          CI: true
+
+      - name: Run Extension Host smoke tests
+        run: xvfb-run -a npm run test:extension
+        env:
+          CI: true
+
+      - name: Build extension bundle
+        run: npm run build
+
+      - name: Package VSIX
+        run: npm run package:vsix
+
+      - name: Generate sample presentations (PPTX & PDF)
+        run: |
+          npm run generate:sample
+          npm run generate:pdf
+
+      - name: Verify package size limits
+        shell: bash
+        run: |
+          VSIX_FILE=$(ls generated/*.vsix | head -n 1)
+          if [ -z "$VSIX_FILE" ]; then
+            echo "Error: VSIX file not found in generated/"
+            exit 1
+          fi
+
+          VSIX_SIZE=$(wc -c < "$VSIX_FILE")
+          MAX_VSIX_SIZE=$((5 * 1024 * 1024))
+          echo "VSIX size: $VSIX_SIZE bytes (Max: $MAX_VSIX_SIZE bytes)"
+          if [ "$VSIX_SIZE" -gt "$MAX_VSIX_SIZE" ]; then
+            echo "Error: VSIX size exceeds limit of 5MB"
+            exit 1
+          fi
+
+          BUNDLE_SIZE=$(wc -c < "dist/extension.cjs")
+          MAX_BUNDLE_SIZE=$((15 * 1024 * 1024))
+          echo "Bundle size: $BUNDLE_SIZE bytes (Max: $MAX_BUNDLE_SIZE bytes)"
+          if [ "$BUNDLE_SIZE" -gt "$MAX_BUNDLE_SIZE" ]; then
+            echo "Error: dist/extension.cjs exceeds limit of 15MB"
+            exit 1
+          fi
+
+      - name: Check for unexpected working tree changes
+        shell: bash
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Error: Uncommitted changes detected after build and package:"
+            git status --short
+            exit 1
+          fi
+
+      - name: Upload artifacts (VSIX, PPTX, PDF)
+        if: matrix.node-version == 24
+        uses: actions/upload-artifact@v4
+        with:
+          name: md-tech-slide-artifacts
+          path: |
+            generated/*.vsix
+            output/*.pptx
+            output/*.pdf
+          retention-days: 7
+
+  validate-cross-os:
+    name: Cross-OS (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        node-version: [24]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Check code formatting
+        run: npm run format:check
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Run unit and structural tests
+        run: npm test
+
+      - name: Build extension bundle
+        run: npm run build
+
+      - name: Package VSIX
+        run: npm run package:vsix

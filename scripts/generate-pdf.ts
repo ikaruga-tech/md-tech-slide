@@ -17,7 +17,9 @@ async function main(): Promise<void> {
 
   console.log('Parsing Markdown to Slide IR...');
   const deck = parseMarkdownToSlideDeck(source);
-  console.log(`Parsed ${deck.slides.length} slides with theme "${deck.metadata.theme ?? 'default'}"`);
+  console.log(
+    `Parsed ${deck.slides.length} slides with theme "${deck.metadata.theme ?? 'default'}"`
+  );
 
   console.log(`Generating PDF to: ${outputPath}...`);
   await exportDeckToPdf(deck, outputPath, {
