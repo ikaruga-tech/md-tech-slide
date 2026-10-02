@@ -65,6 +65,10 @@ describe('bundle and package metadata', () => {
 
   it('extension bundle exports activate and deactivate', () => {
     const bundlePath = path.resolve(__dirname, '../dist/extension.cjs');
+    if (!fs.existsSync(bundlePath)) {
+      const { execSync } = createRequire(import.meta.url)('node:child_process');
+      execSync('node esbuild.js', { cwd: path.resolve(__dirname, '..'), stdio: 'pipe' });
+    }
     expect(fs.existsSync(bundlePath)).toBe(true);
 
     const require = createRequire(import.meta.url);

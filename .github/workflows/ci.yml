@@ -64,6 +64,9 @@ jobs:
       - name: TypeScript typecheck
         run: npm run typecheck
 
+      - name: Build extension bundle
+        run: npm run build
+
       - name: Run unit and structural tests
         run: npm test
 
@@ -76,9 +79,6 @@ jobs:
         run: xvfb-run -a npm run test:extension
         env:
           CI: true
-
-      - name: Build extension bundle
-        run: npm run build
 
       - name: Package VSIX
         run: npm run package:vsix
@@ -164,11 +164,11 @@ jobs:
       - name: TypeScript typecheck
         run: npm run typecheck
 
-      - name: Run unit and structural tests
-        run: npm test
-
       - name: Build extension bundle
         run: npm run build
+
+      - name: Run unit and structural tests
+        run: npm test
 
       - name: Package VSIX
         run: npm run package:vsix

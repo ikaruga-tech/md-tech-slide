@@ -17,9 +17,9 @@ describe('browser-finder', () => {
   });
 
   it('respects PUPPETEER_EXECUTABLE_PATH when set', () => {
-    process.env['PUPPETEER_EXECUTABLE_PATH'] = '/bin/sh'; // 確実に存在するパス
+    process.env['PUPPETEER_EXECUTABLE_PATH'] = process.execPath;
     const found = findInstalledBrowser();
-    expect(found).toBe('/bin/sh');
+    expect(found).toBe(process.execPath);
   });
 
   it('returns a string path or null on host system', () => {

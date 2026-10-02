@@ -149,7 +149,7 @@
     "watch": "node esbuild.js --watch",
     "package": "vsce package --no-dependencies",
     "package:vsix": "node scripts/package-vsix.js",
-    "verify": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run test:pdf-e2e && npm run test:extension && npm run build && npm run package:vsix",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm run test:pdf-e2e && npm run test:extension && npm run package:vsix",
     "generate:sample": "tsx scripts/generate-sample.ts",
     "generate:pdf": "tsx scripts/generate-pdf.ts",
     "generate:licenses": "node scripts/generate-licenses.js"
