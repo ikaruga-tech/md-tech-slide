@@ -6,9 +6,11 @@ import type {
   ListBlock,
   CodeBlock,
   TableBlock,
+  PptxRoleSizes,
 } from '../types/ir.js';
 import { getSlideGrid } from './grid.js';
 import type { SlideGrid } from './types.js';
+import { calculatePptxSizes, getDeckTypography } from '../theme/typography.js';
 
 export interface LayoutDiagnosticIssue {
   readonly slideIndex: number; // 0-based
@@ -21,22 +23,32 @@ export interface LayoutDiagnosticIssue {
 
 const ELEMENT_MARGIN = 0.15;
 
-export function estimateElementHeight(element: BlockElement, columnWidth: number): number {
+export function estimateElementHeight(
+  element: BlockElement,
+  columnWidth: number,
+  sizes?: PptxRoleSizes
+): number {
+  const resolvedSizes = sizes ?? calculatePptxSizes({});
+  const bodyScale = resolvedSizes.body / 15;
+  const headingScale = resolvedSizes.slideTitle / 26;
+  const codeScale = resolvedSizes.code / 13;
+
   switch (element.type) {
     case 'heading': {
       const heading = element as HeadingBlock;
-      if (heading.level === 1) return 0.8 + ELEMENT_MARGIN;
-      if (heading.level === 2) return 0.6 + ELEMENT_MARGIN;
-      return 0.45 + ELEMENT_MARGIN;
+      let baseH = 0.45;
+      if (heading.level === 1) baseH = 0.8;
+      else if (heading.level === 2) baseH = 0.6;
+      return baseH * headingScale + ELEMENT_MARGIN;
     }
 
     case 'paragraph': {
       const para = element as ParagraphBlock;
       const totalChars = para.spans.reduce((sum, s) => sum + s.text.length, 0);
-      // カラム幅に応じた概算文字数/行（1インチあたり約15〜18文字）
-      const charsPerLine = Math.max(20, Math.floor(columnWidth * 16));
+      // カラム幅に応じた概算文字数/行（フォントサイズ比率に応じて文字幅がスケール）
+      const charsPerLine = Math.max(10, Math.floor((columnWidth * 16) / bodyScale));
       const lineCount = Math.max(1, Math.ceil(totalChars / charsPerLine));
-      return lineCount * 0.28 + ELEMENT_MARGIN;
+      return lineCount * 0.28 * bodyScale + ELEMENT_MARGIN;
     }
 
     case 'list': {
@@ -52,13 +64,13 @@ export function estimateElementHeight(element: BlockElement, columnWidth: number
         return count;
       };
       const totalItems = countItems(list.items);
-      return Math.max(1, totalItems) * 0.28 + ELEMENT_MARGIN;
+      return Math.max(1, totalItems) * 0.28 * bodyScale + ELEMENT_MARGIN;
     }
 
     case 'code': {
       const code = element as CodeBlock;
       const lineCount = code.code.split('\n').length;
-      return lineCount * 0.22 + 0.3 + ELEMENT_MARGIN;
+      return (lineCount * 0.22 + 0.3) * codeScale + ELEMENT_MARGIN;
     }
 
     case 'image': {
@@ -67,7 +79,11 @@ export function estimateElementHeight(element: BlockElement, columnWidth: number
 
     case 'table': {
       const tbl = element as TableBlock;
-      return (tbl.rows.length + 1) * 0.35 + ELEMENT_MARGIN;
+      const headerRatio = resolvedSizes.tableHeader / 13;
+      const rowRatio = resolvedSizes.tableBody / 12;
+      const totalRows = tbl.rows.length + 1;
+      const avgScale = (headerRatio + tbl.rows.length * rowRatio) / totalRows;
+      return totalRows * 0.35 * avgScale + ELEMENT_MARGIN;
     }
   }
 }
@@ -78,6 +94,9 @@ export function analyzeLayoutOverflow(deck: SlideDeck): LayoutDiagnosticIssue[] 
   const availableHeight = grid.body.h; // 通常 4.8 インチ
   const issues: LayoutDiagnosticIssue[] = [];
 
+  const typography = getDeckTypography(deck);
+  const pptxSizes = calculatePptxSizes(typography.sizes);
+
   for (const slide of deck.slides) {
     const slideIndex = slide.index; // 0-based
     const body = slide.slots.body;
@@ -85,7 +104,7 @@ export function analyzeLayoutOverflow(deck: SlideDeck): LayoutDiagnosticIssue[] 
     if (body.type === 'single') {
       let totalHeight = 0;
       for (const el of body.elements) {
-        totalHeight += estimateElementHeight(el, grid.body.w);
+        totalHeight += estimateElementHeight(el, grid.body.w, pptxSizes);
       }
       // 最後の余白を引く
       if (body.elements.length > 0) {
@@ -113,7 +132,7 @@ export function analyzeLayoutOverflow(deck: SlideDeck): LayoutDiagnosticIssue[] 
 
         let colHeight = 0;
         for (const el of col.elements) {
-          colHeight += estimateElementHeight(el, defaultColWidth);
+          colHeight += estimateElementHeight(el, defaultColWidth, pptxSizes);
         }
         if (col.elements.length > 0) {
           colHeight -= ELEMENT_MARGIN;

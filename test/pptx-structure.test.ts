@@ -84,4 +84,157 @@ describe('pptx-structure regression tests', () => {
     expect(info.slideDimensions.widthInches).toBeCloseTo(10.0, 1);
     expect(info.slideDimensions.heightInches).toBeCloseTo(7.5, 1);
   });
+
+  describe('Phase 8: Typography OpenXML typeface and size verification', () => {
+    it('applies custom fonts and scaled font sizes across all elements in OpenXML', async () => {
+      const markdown = `---
+title: "OpenXML Typography Test"
+fonts:
+  heading: "BIZ UDPGothic"
+  body: "Yu Gothic"
+  code: "Cascadia Code"
+fontSize:
+  heading: 28
+  body: 18
+paginate: true
+---
+# Main Title Slide
+
+########
+
+## Content Slide Title
+
+This is regular body text and \`inline code\`.
+
+- First list item
+- Second list item with \`list code\`
+
+\`\`\`typescript
+const x = 42;
+\`\`\`
+
+| ColHeader |
+| --- |
+| \`codeCell\` |
+| normalCell |
+`;
+      const deck = parseMarkdownToSlideDeck(markdown);
+      const pptx = await generatePresentation(deck);
+      const buffer = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer;
+
+      const info = await inspectPptxBuffer(buffer);
+
+      // Slide 1: Title slide title should be scaled from 36pt: 36 * (28 / 26) = 38.77pt
+      const slide1 = info.slides[0];
+      expect(slide1).toBeDefined();
+      const titleRunSlide1 = slide1!.textRuns.find((r) => r.text === 'Main Title Slide');
+      expect(titleRunSlide1).toBeDefined();
+      expect(titleRunSlide1?.fontSizePt).toBeCloseTo(38.77, 1);
+      expect(titleRunSlide1?.latinTypeface).toBe('BIZ UDPGothic');
+      expect(titleRunSlide1?.eaTypeface).toBe('BIZ UDPGothic');
+
+      // Slide 2: Content slide
+      const slide2 = info.slides[1];
+      expect(slide2).toBeDefined();
+      const runs = slide2!.textRuns;
+      expect(runs.length).toBeGreaterThan(0);
+
+      // 1. Content Slide Title: should use heading font (BIZ UDPGothic) and exact heading size (28pt)
+      const titleRun = runs.find((r) => r.text === 'Content Slide Title');
+      expect(titleRun).toBeDefined();
+      expect(titleRun?.fontSizePt).toBe(28);
+      expect(titleRun?.latinTypeface).toBe('BIZ UDPGothic');
+      expect(titleRun?.eaTypeface).toBe('BIZ UDPGothic');
+
+      // 2. Body paragraph: should use body font (Yu Gothic) and body size (18pt)
+      const bodyRun = runs.find((r) => r.text.includes('This is regular body text and'));
+      expect(bodyRun).toBeDefined();
+      expect(bodyRun?.fontSizePt).toBe(18);
+      expect(bodyRun?.latinTypeface).toBe('Yu Gothic');
+      expect(bodyRun?.eaTypeface).toBe('Yu Gothic');
+
+      // 3. Inline code in paragraph: should use code font (Cascadia Code) and body size (18pt)
+      const inlineCodeRun = runs.find((r) => r.text === 'inline code');
+      expect(inlineCodeRun).toBeDefined();
+      expect(inlineCodeRun?.fontSizePt).toBe(18);
+      expect(inlineCodeRun?.latinTypeface).toBe('Cascadia Code');
+      expect(inlineCodeRun?.eaTypeface).toBe('Cascadia Code');
+
+      // 4. List item: should use body font (Yu Gothic) and list size (18pt)
+      const listRun = runs.find((r) => r.text.includes('First list item'));
+      expect(listRun).toBeDefined();
+      expect(listRun?.fontSizePt).toBe(18);
+      expect(listRun?.latinTypeface).toBe('Yu Gothic');
+      expect(listRun?.eaTypeface).toBe('Yu Gothic');
+
+      // 5. Code block token: should use code font (Cascadia Code) and scaled code size (18 / 15 * 13 = 15.6pt)
+      const codeBlockToken = runs.find((r) => r.text === 'const' || r.text === 'x');
+      expect(codeBlockToken).toBeDefined();
+      expect(codeBlockToken?.fontSizePt).toBeCloseTo(15.6, 1);
+      expect(codeBlockToken?.latinTypeface).toBe('Cascadia Code');
+      expect(codeBlockToken?.eaTypeface).toBe('Cascadia Code');
+
+      // 6. Table header: should use heading font (BIZ UDPGothic) and scaled header size (18 / 15 * 13 = 15.6pt)
+      const tableHeaderRun = runs.find((r) => r.text === 'ColHeader');
+      expect(tableHeaderRun).toBeDefined();
+      expect(tableHeaderRun?.fontSizePt).toBeCloseTo(15.6, 1);
+      expect(tableHeaderRun?.latinTypeface).toBe('BIZ UDPGothic');
+      expect(tableHeaderRun?.eaTypeface).toBe('BIZ UDPGothic');
+
+      // 7. Table code cell: should use code font (Cascadia Code) and scaled body size (18 / 15 * 12 = 14.4pt)
+      const tableCodeRun = runs.find((r) => r.text === 'codeCell');
+      expect(tableCodeRun).toBeDefined();
+      expect(tableCodeRun?.fontSizePt).toBeCloseTo(14.4, 1);
+      expect(tableCodeRun?.latinTypeface).toBe('Cascadia Code');
+      expect(tableCodeRun?.eaTypeface).toBe('Cascadia Code');
+
+      // 8. Table body normal cell: should use body font (Yu Gothic) and scaled body size (18 / 15 * 12 = 14.4pt)
+      const tableNormalRun = runs.find((r) => r.text === 'normalCell');
+      expect(tableNormalRun).toBeDefined();
+      expect(tableNormalRun?.fontSizePt).toBeCloseTo(14.4, 1);
+      expect(tableNormalRun?.latinTypeface).toBe('Yu Gothic');
+      expect(tableNormalRun?.eaTypeface).toBe('Yu Gothic');
+
+      // 9. Footer (Page number): should use body font (Yu Gothic) and scaled footer size (18 / 15 * 10 = 12pt)
+      const footerRun = runs.find((r) => r.text.includes('2 / 2'));
+      expect(footerRun).toBeDefined();
+      expect(footerRun?.fontSizePt).toBeCloseTo(12, 1);
+      expect(footerRun?.latinTypeface).toBe('Yu Gothic');
+      expect(footerRun?.eaTypeface).toBe('Yu Gothic');
+    });
+
+    it('maintains exact default sizes when no typography is specified', async () => {
+      const markdown = `---
+title: "Default PPTX Test"
+paginate: true
+---
+# Default Title Slide
+
+########
+
+## Default Content Title
+Default body
+`;
+      const deck = parseMarkdownToSlideDeck(markdown);
+      const pptx = await generatePresentation(deck);
+      const buffer = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer;
+
+      const info = await inspectPptxBuffer(buffer);
+
+      // Slide 1: Title slide title default is 36pt
+      const titleRunSlide1 = info.slides[0]!.textRuns.find((r) => r.text === 'Default Title Slide');
+      expect(titleRunSlide1?.fontSizePt).toBe(36);
+
+      // Slide 2: Content slide title default is 26pt, body default is 15pt, footer is 10pt
+      const runsSlide2 = info.slides[1]!.textRuns;
+      const titleRun = runsSlide2.find((r) => r.text === 'Default Content Title');
+      expect(titleRun?.fontSizePt).toBe(26);
+
+      const bodyRun = runsSlide2.find((r) => r.text.includes('Default body'));
+      expect(bodyRun?.fontSizePt).toBe(15);
+
+      const footerRun = runsSlide2.find((r) => r.text.includes('2 / 2'));
+      expect(footerRun?.fontSizePt).toBe(10);
+    });
+  });
 });

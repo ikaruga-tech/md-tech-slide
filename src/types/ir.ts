@@ -102,7 +102,50 @@ export interface SlideDeckMetadata {
   readonly [key: string]: unknown;
 }
 
+export interface TypographyFonts {
+  readonly body: string;
+  readonly heading: string;
+  readonly code: string;
+}
+
+export interface TypographySizes {
+  readonly body?: number;
+  readonly heading?: number;
+  readonly legacyBase?: number;
+}
+
+export interface TypographySettings {
+  readonly fonts: TypographyFonts;
+  readonly sizes: TypographySizes;
+}
+
+export interface PptxRoleSizes {
+  readonly titleSlideTitle: number;
+  readonly slideTitle: number;
+  readonly bodyHeadingLevel3: number;
+  readonly bodyHeadingOther: number;
+  readonly body: number;
+  readonly list: number;
+  readonly tableHeader: number;
+  readonly tableBody: number;
+  readonly code: number;
+  readonly footer: number;
+}
+
+export interface PreviewRoleSizes {
+  readonly titleSlideTitle: number;
+  readonly slideTitle: number;
+  readonly bodyHeading: number;
+  readonly body: number;
+  readonly list: number;
+  readonly table: number;
+  readonly code: number;
+  readonly footer: number;
+  readonly unit: 'px' | 'pt';
+}
+
 export interface SlideDeck {
   readonly metadata: SlideDeckMetadata;
   readonly slides: readonly Slide[];
+  readonly typography?: TypographySettings;
 }

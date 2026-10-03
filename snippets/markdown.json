@@ -1,4 +1,23 @@
 {
+  "Frontmatter": {
+    "prefix": ["frontmatter", "/frontmatter"],
+    "body": [
+      "---",
+      "title: \"${1:プレゼンテーションタイトル}\"",
+      "author: \"${2:発表者名}\"",
+      "theme: \"${3|default,corporate,dark|}\"",
+      "font: \"${4:BIZ UDPGothic}\"",
+      "codeFont: \"${5:Cascadia Code}\"",
+      "aspectRatio: \"${6|16:9,4:3|}\"",
+      "paginate: ${7|true,false|}",
+      "---",
+      "",
+      "# ${1:プレゼンテーションタイトル}",
+      "",
+      "${0:スライドの概要}"
+    ],
+    "description": "プレゼンテーションのFrontmatter設定と表紙スライドを挿入します"
+  },
   "Slide Delimiter": {
     "prefix": ["slide", "/slide"],
     "body": ["########", "", "## ${1:スライドタイトル}", "", "${0:スライドのコンテンツを記述}"],

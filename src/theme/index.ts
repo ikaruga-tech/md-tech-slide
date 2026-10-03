@@ -18,3 +18,4 @@ export function resolveTheme(themeName?: string): SlideTheme {
 
 export * from './types.js';
 export * from './presets.js';
+export * from './typography.js';

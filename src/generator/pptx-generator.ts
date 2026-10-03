@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { SlideDeck } from '../types/ir.js';
 import type { PptxInstance } from '../types/pptx.js';
-import { resolveTheme } from '../theme/index.js';
+import { resolveTheme, getDeckTypography } from '../theme/index.js';
 import { getSlideGrid } from '../layout/grid.js';
 import { renderSlide } from './slide-renderer.js';
 import type { RenderOptions } from './element-renderer.js';
@@ -31,13 +31,23 @@ export async function generatePresentation(
   }
 
   const theme = resolveTheme(deck.metadata.theme ? String(deck.metadata.theme) : undefined);
+  const typography = getDeckTypography(deck);
   const grid = getSlideGrid(is4x3 ? '4:3' : '16:9');
 
   const defaultPaginate = deck.metadata.paginate !== false;
 
   for (const slideData of deck.slides) {
     const slide = pptx.addSlide();
-    await renderSlide(slide, slideData, grid, theme, deck.slides.length, options, defaultPaginate);
+    await renderSlide(
+      slide,
+      slideData,
+      grid,
+      theme,
+      deck.slides.length,
+      options,
+      defaultPaginate,
+      typography
+    );
   }
 
   return pptx;

@@ -40,7 +40,8 @@ export async function highlightCodeToTextProps(
   language: string | undefined,
   shikiTheme: string,
   fontFace: string,
-  defaultTextColor: string
+  defaultTextColor: string,
+  fontSize: number = 13
 ): Promise<readonly HighlightedSpan[]> {
   const highlighter = await getHighlighter();
   const loadedLangs = highlighter.getLoadedLanguages();
@@ -66,7 +67,7 @@ export async function highlightCodeToTextProps(
         options: {
           color,
           fontFace,
-          fontSize: 13,
+          fontSize,
           bold: (token.fontStyle ?? 0) === 1,
           italic: (token.fontStyle ?? 0) === 2,
         },
@@ -79,7 +80,7 @@ export async function highlightCodeToTextProps(
         text: '\n',
         options: {
           fontFace,
-          fontSize: 13,
+          fontSize,
         },
       });
     }
