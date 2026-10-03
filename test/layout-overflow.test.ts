@@ -148,4 +148,73 @@ Short text.
     expect(Array.isArray(result.diagnostics)).toBe(true);
     expect(result.diagnostics.length).toBe(0);
   });
+
+  describe('Phase 8: Font size impact on overflow diagnostics', () => {
+    const baseContent = `
+# Slide 1
+
+This is paragraph one explaining system architecture.
+It takes a reasonable amount of horizontal width.
+
+This is paragraph two detailing operational procedures.
+It also contributes to vertical space usage on the slide.
+
+- Key point A with detailed description
+- Key point B with technical considerations
+- Key point C with deployment guidelines
+- Key point D with monitoring strategy
+`;
+
+    it('triggers overflow when font size is significantly increased', () => {
+      // 1. With default font size: fits comfortably
+      const defaultMarkdown = `---
+title: "Default Size"
+---
+${baseContent}
+`;
+      const defaultDeck = parseMarkdownToSlideDeck(defaultMarkdown);
+      const defaultIssues = analyzeLayoutOverflow(defaultDeck);
+      expect(defaultIssues).toHaveLength(0);
+
+      // 2. With larger body size (e.g., 36pt vs default 15pt): triggers overflow
+      const largeMarkdown = `---
+title: "Large Size"
+fontSize:
+  body: 36
+---
+${baseContent}
+`;
+      const largeDeck = parseMarkdownToSlideDeck(largeMarkdown);
+      const largeIssues = analyzeLayoutOverflow(largeDeck);
+      expect(largeIssues.length).toBeGreaterThanOrEqual(1);
+      expect(largeIssues[0]?.overflowAmount).toBeGreaterThan(0);
+    });
+
+    it('reduces estimated height and avoids overflow when smaller font size is specified', () => {
+      const longContent = `---
+title: "Content Size Comparison"
+---
+# Slide 1
+
+${Array.from({ length: 14 }, (_, i) => `Paragraph item number ${i + 1} with significant length to fill lines.`).join('\n\n')}
+`;
+      const defaultDeck = parseMarkdownToSlideDeck(longContent);
+      const defaultIssues = analyzeLayoutOverflow(defaultDeck);
+      expect(defaultIssues.length).toBeGreaterThanOrEqual(1);
+
+      // Same content with smaller body size (9pt)
+      const smallMarkdown = `---
+title: "Content Size Comparison"
+fontSize:
+  body: 9
+---
+# Slide 1
+
+${Array.from({ length: 14 }, (_, i) => `Paragraph item number ${i + 1} with significant length to fill lines.`).join('\n\n')}
+`;
+      const smallDeck = parseMarkdownToSlideDeck(smallMarkdown);
+      const smallIssues = analyzeLayoutOverflow(smallDeck);
+      expect(smallIssues.length).toBeLessThan(defaultIssues.length);
+    });
+  });
 });

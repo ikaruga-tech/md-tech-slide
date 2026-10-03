@@ -1,6 +1,13 @@
 import JSZip from 'jszip';
 import * as fs from 'node:fs';
 
+export interface PptxTextRunInfo {
+  readonly text: string;
+  readonly fontSizePt?: number;
+  readonly latinTypeface?: string;
+  readonly eaTypeface?: string;
+}
+
 export interface PptxStructureInfo {
   readonly slideCount: number;
   readonly slideDimensions: {
@@ -17,6 +24,7 @@ export interface PptxStructureInfo {
     readonly hasNotes: boolean;
     readonly notesText?: string;
     readonly textContents: readonly string[];
+    readonly textRuns: readonly PptxTextRunInfo[];
   }[];
 }
 
@@ -29,6 +37,57 @@ function decodeXml(text: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'");
+}
+
+export function extractTextRunsFromXml(xml: string): PptxTextRunInfo[] {
+  const runs: PptxTextRunInfo[] = [];
+
+  // Match text runs (<a:r> ... </a:r>) and fields (<a:fld> ... </a:fld>)
+  const runMatches = xml.matchAll(/<(?:a:r|a:fld)[\s>][\s\S]*?<\/(?:a:r|a:fld)>/g);
+
+  for (const match of runMatches) {
+    const runXml = match[0];
+
+    const tMatch = runXml.match(/<a:t>([^<]*)<\/a:t>/);
+    if (!tMatch) {
+      continue;
+    }
+    const text = decodeXml(tMatch[1] ?? '');
+
+    let fontSizePt: number | undefined;
+    let latinTypeface: string | undefined;
+    let eaTypeface: string | undefined;
+
+    const rPrMatch = runXml.match(/<a:rPr\b([^>]*)>([\s\S]*?)<\/a:rPr>/);
+    if (rPrMatch) {
+      const rPrAttrs = rPrMatch[1] ?? '';
+      const rPrBody = rPrMatch[2] ?? '';
+
+      const szMatch = rPrAttrs.match(/\bsz="(\d+)"/);
+      if (szMatch) {
+        fontSizePt = parseInt(szMatch[1] ?? '0', 10) / 100;
+      }
+
+      const latinMatch = rPrBody.match(/<a:latin\b[^>]*\btypeface="([^"]*)"/);
+      if (latinMatch) {
+        latinTypeface = decodeXml(latinMatch[1] ?? '');
+      }
+
+      const eaMatch = rPrBody.match(/<a:ea\b[^>]*\btypeface="([^"]*)"/);
+      if (eaMatch) {
+        eaTypeface = decodeXml(eaMatch[1] ?? '');
+      }
+    }
+
+    runs.push({
+      text,
+      fontSizePt,
+      latinTypeface,
+      eaTypeface,
+    });
+  }
+
+  return runs;
 }
 
 export async function inspectPptxFile(filePath: string): Promise<PptxStructureInfo> {
@@ -86,6 +145,8 @@ export async function inspectPptxBuffer(buffer: Buffer | Uint8Array): Promise<Pp
         decodeXml(m[1] ?? '')
       );
 
+      const textRuns = extractTextRunsFromXml(xml);
+
       return {
         slideNumber: slideNum,
         xml,
@@ -94,6 +155,7 @@ export async function inspectPptxBuffer(buffer: Buffer | Uint8Array): Promise<Pp
         hasNotes: Boolean(notesXml),
         notesText,
         textContents: textMatches,
+        textRuns,
       };
     })
   );

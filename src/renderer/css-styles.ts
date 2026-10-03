@@ -1,7 +1,39 @@
 import type { SlideTheme } from '../theme/types.js';
+import type { TypographySettings } from '../types/ir.js';
+import { calculatePreviewSizes } from '../theme/typography.js';
 
-export function generatePreviewCss(theme: SlideTheme, aspectRatio: '16:9' | '4:3'): string {
+/**
+ * Safely escapes a font family name for use inside CSS double quotes,
+ * preventing CSS breaking and HTML </style> raw-text breakout attacks.
+ */
+export function escapeCssFontFamily(fontName: string): string {
+  // 1. Escape backslashes and double quotes
+  const escaped = fontName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // 2. Convert < and > to CSS Unicode Escapes (\3c and \3e with trailing space)
+  const converted = escaped.replace(/</g, '\\3c ').replace(/>/g, '\\3e ');
+  // 3. Strip control characters and newlines
+  let sanitized = '';
+  for (let i = 0; i < converted.length; i++) {
+    const code = converted.charCodeAt(i);
+    if (!((code >= 0 && code <= 31) || (code >= 127 && code <= 159))) {
+      sanitized += converted[i];
+    }
+  }
+  return sanitized;
+}
+
+export function generatePreviewCss(
+  theme: SlideTheme,
+  aspectRatio: '16:9' | '4:3',
+  typography?: TypographySettings
+): string {
   const aspectValue = aspectRatio === '4:3' ? '4 / 3' : '16 / 9';
+
+  const headingFont = typography?.fonts.heading ?? theme.fonts.heading;
+  const bodyFont = typography?.fonts.body ?? theme.fonts.body;
+  const codeFont = typography?.fonts.code ?? theme.fonts.code;
+
+  const previewSizes = calculatePreviewSizes(typography?.sizes ?? {});
 
   return `
 :root {
@@ -16,10 +48,19 @@ export function generatePreviewCss(theme: SlideTheme, aspectRatio: '16:9' | '4:3
   --inline-code-text: ${theme.name === 'dark' ? '#38BDF8' : '#0F172A'};
   --inline-code-border: ${theme.name === 'dark' ? '#475569' : '#CBD5E1'};
   --accent-color: #${theme.colors.accent};
-  --font-heading: "${theme.fonts.heading}", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body: "${theme.fonts.body}", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-code: "${theme.fonts.code}", Consolas, Menlo, Monaco, "Courier New", monospace;
+  --font-heading: "${escapeCssFontFamily(headingFont)}", -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  --font-body: "${escapeCssFontFamily(bodyFont)}", -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  --font-code: "${escapeCssFontFamily(codeFont)}", Consolas, "Cascadia Code", Menlo, Monaco, "Courier New", monospace;
   --slide-aspect: ${aspectValue};
+
+  --font-size-title-slide: ${previewSizes.titleSlideTitle}${previewSizes.unit};
+  --font-size-slide-title: ${previewSizes.slideTitle}${previewSizes.unit};
+  --font-size-body-heading: ${previewSizes.bodyHeading}${previewSizes.unit};
+  --font-size-body: ${previewSizes.body}${previewSizes.unit};
+  --font-size-list: ${previewSizes.list}${previewSizes.unit};
+  --font-size-table: ${previewSizes.table}${previewSizes.unit};
+  --font-size-code: ${previewSizes.code}${previewSizes.unit};
+  --font-size-footer: ${previewSizes.footer}${previewSizes.unit};
 }
 
 * {
@@ -80,7 +121,7 @@ body {
   margin: 0;
   color: var(--title-color);
   font-family: var(--font-heading);
-  font-size: 24px;
+  font-size: var(--font-size-slide-title, 24px);
   font-weight: 700;
   line-height: 1.25;
 }
@@ -92,7 +133,7 @@ body {
 }
 
 .slide-card.title-slide .slide-title {
-  font-size: 36px;
+  font-size: var(--font-size-title-slide, 36px);
   margin-bottom: 16px;
 }
 
@@ -125,14 +166,14 @@ h3 {
   margin: 0;
   color: var(--title-color);
   font-family: var(--font-heading);
-  font-size: 17px;
+  font-size: var(--font-size-body-heading, 17px);
   font-weight: 600;
 }
 
 p {
   margin: 0;
   line-height: 1.45;
-  font-size: 14px;
+  font-size: var(--font-size-body, 14px);
 }
 
 ul, ol {
@@ -142,7 +183,7 @@ ul, ol {
 
 li {
   margin-bottom: 3px;
-  font-size: 14px;
+  font-size: var(--font-size-list, 14px);
   line-height: 1.4;
 }
 
@@ -162,7 +203,7 @@ pre.code-block {
   word-break: break-word;
   overflow-wrap: anywhere;
   font-family: var(--font-code);
-  font-size: 11.5px;
+  font-size: var(--font-size-code, 11.5px);
   line-height: 1.4;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   max-width: 100%;
@@ -240,7 +281,7 @@ img.slide-image {
 table.slide-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--font-size-table, 13px);
   margin: 4px 0;
   border-radius: 6px;
   overflow: hidden;
@@ -263,7 +304,7 @@ table.slide-table th {
   position: absolute;
   bottom: 12px;
   right: 20px;
-  font-size: 11px;
+  font-size: var(--font-size-footer, 11px);
   color: var(--muted-color);
 }
 

@@ -3,6 +3,8 @@ import { parseFrontmatter } from './frontmatter.js';
 import { splitSlides } from './slide-splitter.js';
 import { createSlideMarkdownIt } from './markdown-it-setup.js';
 import { buildSlideFromTokens } from './slide-builder.js';
+import { resolveTheme } from '../theme/index.js';
+import { resolveTypography } from '../theme/typography.js';
 
 export interface ParseDeckDefaults {
   readonly defaultTheme?: string;
@@ -32,9 +34,18 @@ export function parseMarkdownToSlideDeck(
     aspectRatio: validAspectRatio,
   };
 
+  let theme;
+  try {
+    theme = resolveTheme(resolvedMetadata.theme);
+  } catch {
+    theme = resolveTheme();
+  }
+  const typography = resolveTypography(metadata as Record<string, unknown>, theme);
+
   return {
     metadata: resolvedMetadata,
     slides,
+    typography,
   };
 }
 

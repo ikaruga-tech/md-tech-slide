@@ -20,6 +20,12 @@ describe('parseMarkdownToSlideDeck', () => {
     expect(deck.metadata.theme).toBe('corporate');
     expect(deck.metadata.aspectRatio).toBe('16:9');
 
+    // Typography 検証 (theme: corporate 由来)
+    expect(deck.typography).toBeDefined();
+    expect(deck.typography?.fonts.heading).toBe('Calibri');
+    expect(deck.typography?.fonts.body).toBe('Calibri');
+    expect(deck.typography?.fonts.code).toBe('Consolas');
+
     // スライド数検証
     expect(deck.slides).toHaveLength(3);
 
@@ -147,5 +153,25 @@ theme: "dark"
       const col3 = slide.slots.body.columns[2];
       expect(col3?.elements).toHaveLength(1);
     }
+  });
+
+  it('parses markdown with custom typography settings', () => {
+    const markdown = `---
+title: "Custom Font Slide"
+font: "BIZ UDPGothic"
+codeFont: "Cascadia Code"
+fontSize:
+  body: 18
+  heading: 28
+---
+# First Slide
+`;
+    const deck = parseMarkdownToSlideDeck(markdown);
+    expect(deck.typography).toBeDefined();
+    expect(deck.typography?.fonts.heading).toBe('BIZ UDPGothic');
+    expect(deck.typography?.fonts.body).toBe('BIZ UDPGothic');
+    expect(deck.typography?.fonts.code).toBe('Cascadia Code');
+    expect(deck.typography?.sizes.body).toBe(18);
+    expect(deck.typography?.sizes.heading).toBe(28);
   });
 });

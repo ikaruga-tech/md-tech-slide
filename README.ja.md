@@ -25,19 +25,26 @@ md-tech-slide は、Markdown から技術プレゼンテーションスライド
 
 スライド全体のメタデータやデフォルト値は、Markdown 先頭の YAML ブロックで設定します。
 
-| キー          | 型      | デフォルト値 | 説明                                             |
-| :------------ | :------ | :----------- | :----------------------------------------------- |
-| `title`       | string  | `""`         | プレゼンテーションのタイトル                     |
-| `author`      | string  | `""`         | 発表者名                                         |
-| `theme`       | string  | `"default"`  | スライドテーマ（`default`, `corporate`, `dark`） |
-| `aspectRatio` | string  | `"16:9"`     | アスペクト比（`16:9`, `4:3`）                    |
-| `paginate`    | boolean | `true`       | フッターのページ番号表示（`true`, `false`）      |
+| キー          | 型               | デフォルト値 | 説明                                                   |
+| :------------ | :--------------- | :----------- | :----------------------------------------------------- |
+| `title`       | string           | `""`         | プレゼンテーションのタイトル                           |
+| `author`      | string           | `""`         | 発表者名                                               |
+| `theme`       | string           | `"default"`  | スライドテーマ（`default`, `corporate`, `dark`）       |
+| `aspectRatio` | string           | `"16:9"`     | アスペクト比（`16:9`, `4:3`）                          |
+| `paginate`    | boolean          | `true`       | フッターのページ番号表示（`true`, `false`）            |
+| `font`        | string           | テーマ依存   | 見出しおよび本文の簡易フォント指定                     |
+| `codeFont`    | string           | テーマ依存   | コードブロックおよびインラインコードのフォント指定     |
+| `fonts`       | mapping          | テーマ依存   | `body`, `heading`, `code` の個別詳細フォント指定       |
+| `fontSize`    | number / mapping | 各要素依存   | 基準文字サイズ（pt、8〜96pt）。旧数値型または詳細指定  |
+| `fontFamily`  | string           | -            | 非推奨（互換用）。`font` または `fonts` への移行を推奨 |
 
 ```markdown
 ---
 title: 'サンプルプレゼンテーション'
 author: '開発チーム'
 theme: 'corporate'
+font: 'BIZ UDPGothic'
+codeFont: 'Cascadia Code'
 aspectRatio: '16:9'
 paginate: true
 ---
@@ -52,6 +59,63 @@ md-tech-slide へようこそ。
 
 スライド本文のコンテンツを記述します。
 ```
+
+### フォント・文字サイズ設定
+
+Frontmatterからスライド全体で利用するフォントと基準文字サイズを柔軟にカスタマイズできます。
+
+#### 1. 簡易形式（推奨）
+
+見出し・本文に同じフォントを適用し、コードフォントを別途指定する最もシンプルな記法です。
+
+```yaml
+---
+font: 'BIZ UDPGothic'
+codeFont: 'Cascadia Code'
+---
+```
+
+#### 2. 詳細形式
+
+見出し・本文・コード用フォントや基準文字サイズを個別に指定します。
+
+```yaml
+---
+fonts:
+  heading: 'BIZ UDPGothic'
+  body: 'Yu Gothic'
+  code: 'Cascadia Code'
+fontSize:
+  heading: 28
+  body: 18
+---
+```
+
+- 文字サイズの単位はポイント（pt）で、許容範囲は `8pt` 〜 `96pt` です。
+- `fontSize.heading` はスライドタイトルの基準値（既定: 26pt）として扱われ、タイトルスライドや小見出しも既存の視覚階層比率を保って追従します。
+- `fontSize.body` は通常本文・リストの基準値（既定: 15pt）として扱われ、表やコード、フッターも比率を保って追従します。詳細形式で `fontSize.body` のみを指定した場合、見出しサイズは既定値を維持します。
+
+#### 3. 優先順位ルール
+
+フォント名は以下の優先順位で解決されます。詳細形式で一部のロールのみを指定した場合は、未指定のロールのみが独立してフォールバックします。
+
+- 本文系: `fonts.body` > `font` > `fontFamily` > テーマの既定フォント > 組み込み既定値
+- 見出し系: `fonts.heading` > `font` > `fontFamily` > テーマの既定フォント > 組み込み既定値
+- コード系: `fonts.code` > `codeFont` > テーマの既定フォント > 組み込み既定値
+
+#### 4. 旧形式との互換性と非推奨警告
+
+旧仕様の `fontFamily` および数値型の `fontSize`（例: `fontSize: 18`）も後方互換性のため引き続き利用可能です。
+旧形式が指定された場合は、ビルドを妨げない警告 Diagnostic（`frontmatter-deprecated-key`）が出力され、推奨記法への案内が表示されます。
+
+#### 5. レンダリング仕様・環境フォントについて
+
+- WebviewプレビューおよびPDF: 指定されたフォントが存在しない場合、OS標準の安全なフォールバックフォントスタック（`-apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif` 等）が適用されます。
+- PowerPoint（PPTX）: ファイルサイズ肥大化や互換性問題を避けるため、フォントファイルのプレゼンテーション内への埋め込みは行いません。閲覧環境に指定フォントがインストールされていない場合は、PowerPoint側で代替フォントが適用され、改行や文字幅などのレイアウトに差異が生じる可能性があります。
+- 推奨フォント例:
+  - 日本語向け: `BIZ UDPGothic`, `Yu Gothic`, `Meiryo`
+  - コード向け: `Cascadia Code`, `Consolas`, `Fira Code`
+- ※ OSのインストール済みフォント自動列挙や診断機能（`Run Doctor`）は、将来バージョン（Phase 10）での提供を検討しております。
 
 ### マルチカラムレイアウト
 

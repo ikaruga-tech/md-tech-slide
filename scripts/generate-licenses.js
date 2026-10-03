@@ -210,7 +210,7 @@ Total bundled third-party packages: ${sortedPackages.length}
   }
 
   const outputFilePath = path.join(rootDir, 'THIRD_PARTY_LICENSES.txt');
-  const fullText = sections.join('\n');
+  const fullText = sections.join('\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   fs.writeFileSync(outputFilePath, fullText, 'utf8');
   console.log(`Generated ${outputFilePath} (${sortedPackages.length} packages)`);
   return outputFilePath;

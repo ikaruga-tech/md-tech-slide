@@ -8,10 +8,12 @@ import type {
   CodeBlock,
   ImageBlock,
   TableBlock,
+  TypographySettings,
 } from '../types/ir.js';
 import type { PptxSlide, PptxTableCell } from '../types/pptx.js';
 import type { SlideTheme } from '../theme/types.js';
 import type { Rect } from '../layout/types.js';
+import { calculatePptxSizes } from '../theme/typography.js';
 import { highlightCodeToTextProps } from './syntax-highlighter.js';
 import { resolveLocalResource } from '../resource/index.js';
 
@@ -35,8 +37,13 @@ function appendListItems(
   props: Array<{ text: string; options?: Record<string, unknown> }>,
   items: readonly ListItem[],
   theme: SlideTheme,
-  indentLevel: number
+  indentLevel: number,
+  typography?: TypographySettings
 ): void {
+  const pptxSizes = calculatePptxSizes(typography?.sizes ?? {});
+  const bodyFont = typography?.fonts.body ?? theme.fonts.body;
+  const codeFont = typography?.fonts.code ?? theme.fonts.code;
+
   for (const item of items) {
     if (item.spans.length === 0) {
       continue;
@@ -47,8 +54,8 @@ function appendListItems(
       const isLast = sIdx === item.spans.length - 1;
       const isCode = Boolean(span.code);
       const opts: Record<string, unknown> = {
-        fontSize: 15,
-        fontFace: isCode ? theme.fonts.code : theme.fonts.body,
+        fontSize: pptxSizes.list,
+        fontFace: isCode ? codeFont : bodyFont,
         color: span.link
           ? theme.colors.accent
           : isCode
@@ -75,7 +82,7 @@ function appendListItems(
     });
 
     if (item.children && item.children.length > 0) {
-      appendListItems(props, item.children, theme, indentLevel + 1);
+      appendListItems(props, item.children, theme, indentLevel + 1, typography);
     }
   }
 }
@@ -85,11 +92,17 @@ export async function renderSlotElements(
   elements: readonly BlockElement[],
   rect: Rect,
   theme: SlideTheme,
-  options?: RenderOptions
+  options?: RenderOptions,
+  typography?: TypographySettings
 ): Promise<void> {
   if (elements.length === 0) {
     return;
   }
+
+  const pptxSizes = calculatePptxSizes(typography?.sizes ?? {});
+  const headingFont = typography?.fonts.heading ?? theme.fonts.heading;
+  const bodyFont = typography?.fonts.body ?? theme.fonts.body;
+  const codeFont = typography?.fonts.code ?? theme.fonts.code;
 
   // すべての要素をスタックモデルで上から順に配置
   let currentY = rect.y;
@@ -105,7 +118,8 @@ export async function renderSlotElements(
     switch (el.type) {
       case 'heading': {
         const heading = el as HeadingBlock;
-        const fontSize = heading.level === 3 ? 19 : 17;
+        const fontSize =
+          heading.level === 3 ? pptxSizes.bodyHeadingLevel3 : pptxSizes.bodyHeadingOther;
         const h = 0.38;
 
         // 見出しの前に適度な上マージンを持たせる
@@ -119,7 +133,7 @@ export async function renderSlotElements(
           w: rect.w,
           h,
           fontSize,
-          fontFace: theme.fonts.heading,
+          fontFace: headingFont,
           color: theme.colors.title,
           bold: true,
           valign: 'top',
@@ -135,8 +149,8 @@ export async function renderSlotElements(
           return {
             text: s.text,
             options: {
-              fontSize: 15,
-              fontFace: isCode ? theme.fonts.code : theme.fonts.body,
+              fontSize: pptxSizes.body,
+              fontFace: isCode ? codeFont : bodyFont,
               color: s.link
                 ? theme.colors.accent
                 : isCode
@@ -170,7 +184,7 @@ export async function renderSlotElements(
       case 'list': {
         const list = el as ListBlock;
         const textProps: Array<{ text: string; options?: Record<string, unknown> }> = [];
-        appendListItems(textProps, list.items, theme, 0);
+        appendListItems(textProps, list.items, theme, 0, typography);
 
         const itemCount = countTotalListItems(list.items);
         const estimatedH = Math.min(availableH, Math.max(0.35, itemCount * 0.32));
@@ -208,8 +222,9 @@ export async function renderSlotElements(
           codeBlock.code,
           codeBlock.language,
           theme.shikiTheme,
-          theme.fonts.code,
-          theme.colors.codeText
+          codeFont,
+          theme.colors.codeText,
+          pptxSizes.code
         );
 
         slide.addText(highlighted, {
@@ -268,8 +283,8 @@ export async function renderSlotElements(
                 bold: true,
                 color: 'FFFFFF',
                 fill: { color: theme.colors.codeBackground },
-                fontFace: theme.fonts.heading,
-                fontSize: 13,
+                fontFace: headingFont,
+                fontSize: pptxSizes.tableHeader,
               },
             }))
           );
@@ -290,8 +305,8 @@ export async function renderSlotElements(
                       ? '38BDF8'
                       : theme.colors.accent
                     : theme.colors.text,
-                  fontFace: isCode ? theme.fonts.code : theme.fonts.body,
-                  fontSize: 12,
+                  fontFace: isCode ? codeFont : bodyFont,
+                  fontSize: pptxSizes.tableBody,
                   bold: isCode,
                 },
               };

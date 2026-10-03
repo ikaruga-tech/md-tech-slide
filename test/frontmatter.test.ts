@@ -34,6 +34,35 @@ title: "Unclosed"
     );
   });
 
+  it('parses frontmatter with font and fontSize properties', () => {
+    const input = `---
+title: "Fonts Test"
+font: "BIZ UDPGothic"
+codeFont: "Cascadia Code"
+fonts:
+  body: "Yu Gothic"
+  heading: "BIZ UDPGothic"
+  code: "Cascadia Code"
+fontSize:
+  body: 18
+  heading: 28
+---
+# Content`;
+
+    const result = parseFrontmatter(input);
+    expect(result.metadata.font).toBe('BIZ UDPGothic');
+    expect(result.metadata.codeFont).toBe('Cascadia Code');
+    expect(result.metadata.fonts).toEqual({
+      body: 'Yu Gothic',
+      heading: 'BIZ UDPGothic',
+      code: 'Cascadia Code',
+    });
+    expect(result.metadata.fontSize).toEqual({
+      body: 18,
+      heading: 28,
+    });
+  });
+
   it('throws error when frontmatter contains invalid YAML', () => {
     const input = `---
 title: [invalid: yaml

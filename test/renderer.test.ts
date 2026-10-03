@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseMarkdownToSlideDeck } from '../src/parser/index.js';
-import { renderDeckToHtml } from '../src/renderer/index.js';
+import { renderDeckToHtml, escapeCssFontFamily } from '../src/renderer/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,5 +125,94 @@ Content
 
     // 表紙（Title）には出ず、2枚目のコンテンツスライドに出る
     expect(html).toContain('<div class="slide-footer">2 / 2</div>');
+  });
+
+  describe('Phase 8: Typography CSS & Injection Prevention', () => {
+    it('reflects custom typography into CSS variables and preserves role stacks', () => {
+      const source = `---
+title: "Custom Typography Preview"
+fonts:
+  heading: "BIZ UDPGothic"
+  body: "Yu Gothic"
+  code: "Cascadia Code"
+fontSize:
+  heading: 28
+  body: 18
+---
+# Heading
+Body text
+`;
+      const deck = parseMarkdownToSlideDeck(source);
+      const html = renderDeckToHtml(deck);
+
+      expect(html).toContain(
+        '--font-heading: "BIZ UDPGothic", -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;'
+      );
+      expect(html).toContain(
+        '--font-body: "Yu Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;'
+      );
+      expect(html).toContain(
+        '--font-code: "Cascadia Code", Consolas, "Cascadia Code", Menlo, Monaco, "Courier New", monospace;'
+      );
+
+      // Converted to pt units
+      expect(html).toContain('--font-size-slide-title:');
+      expect(html).toContain('pt;');
+      expect(html).toContain('--font-size-body: 18pt;');
+    });
+
+    it('maintains exact existing px defaults when sizes are unspecified', () => {
+      const source = `---
+title: "Default Sizes Preview"
+---
+# Heading
+Body text
+`;
+      const deck = parseMarkdownToSlideDeck(source);
+      const html = renderDeckToHtml(deck);
+
+      expect(html).toContain('--font-size-title-slide: 36px;');
+      expect(html).toContain('--font-size-slide-title: 24px;');
+      expect(html).toContain('--font-size-body-heading: 17px;');
+      expect(html).toContain('--font-size-body: 14px;');
+      expect(html).toContain('--font-size-list: 14px;');
+      expect(html).toContain('--font-size-table: 13px;');
+      expect(html).toContain('--font-size-code: 11.5px;');
+      expect(html).toContain('--font-size-footer: 11px;');
+    });
+
+    it('prevents HTML and CSS injection through multi-layer defense', () => {
+      // Layer 3 unit test: verify escapeCssFontFamily directly
+      const escaped = escapeCssFontFamily('Malicious</style><script>alert("heading")</script>');
+      expect(escaped).not.toContain('</style><script>');
+      expect(escaped).toContain('\\3c /style\\3e ');
+      expect(escaped).toContain('alert(\\"heading\\")');
+
+      // Layer 2 integration test: getDeckTypography sanitizes malicious deck before CSS generation
+      const maliciousDeck = {
+        metadata: {
+          title: 'Injection Test',
+          theme: 'default',
+        },
+        slides: [],
+        typography: {
+          fonts: {
+            heading: 'Malicious</style><script>alert("heading")</script>',
+            body: 'Malicious"; color: red; }',
+            code: 'Code</style><script>',
+          },
+          sizes: {},
+        },
+      };
+
+      const html = renderDeckToHtml(maliciousDeck);
+
+      // Verify that malicious inputs were safely fallen back to theme defaults
+      expect(html).not.toContain('</style><script>');
+      expect(html).not.toContain('Malicious');
+      expect(html).toContain('--font-heading: "Segoe UI"');
+      expect(html).toContain('--font-body: "Segoe UI"');
+      expect(html).toContain('--font-code: "Consolas"');
+    });
   });
 });

@@ -13,7 +13,7 @@ import type {
   ColumnsSlot,
 } from '../types/ir.js';
 import * as path from 'node:path';
-import { resolveTheme } from '../theme/index.js';
+import { resolveTheme, getDeckTypography } from '../theme/index.js';
 import { escapeHtml } from './html-escape.js';
 import { generatePreviewCss } from './css-styles.js';
 import { highlightCodeToHtml } from './code-highlighter.js';
@@ -37,7 +37,8 @@ interface RenderContext {
 export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): string {
   const aspectRatio = deck.metadata.aspectRatio === '4:3' ? '4:3' : '16:9';
   const theme = resolveTheme(deck.metadata.theme ? String(deck.metadata.theme) : undefined);
-  const baseCss = generatePreviewCss(theme, aspectRatio);
+  const typography = getDeckTypography(deck);
+  const baseCss = generatePreviewCss(theme, aspectRatio, typography);
 
   const defaultPaginate = deck.metadata.paginate !== false;
   const context: RenderContext = {
