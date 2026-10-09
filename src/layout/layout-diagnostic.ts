@@ -85,6 +85,15 @@ export function estimateElementHeight(
       const avgScale = (headerRatio + tbl.rows.length * rowRatio) / totalRows;
       return totalRows * 0.35 * avgScale + ELEMENT_MARGIN;
     }
+
+    case 'diagram': {
+      if (element.viewBox && element.viewBox.width > 0) {
+        const aspect = element.viewBox.height / element.viewBox.width;
+        const estimatedHeight = Math.min(columnWidth * aspect, 4.5);
+        return estimatedHeight + ELEMENT_MARGIN;
+      }
+      return 2.5 + ELEMENT_MARGIN;
+    }
   }
 }
 

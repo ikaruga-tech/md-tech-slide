@@ -4,11 +4,19 @@ import * as path from 'node:path';
 import type { SlideDeck } from '../types/ir.js';
 import { renderDeckToHtml } from '../renderer/index.js';
 import { findInstalledBrowser } from './browser-finder.js';
+import {
+  resolveDeckDiagrams,
+  hasPendingDiagrams,
+  assertDeckDiagramsSuccessful,
+  type DiagramRenderService,
+} from '../diagram/index.js';
 
 export interface PdfExportOptions {
   readonly baseDir?: string;
   readonly allowedRoots?: readonly string[];
   readonly browserPath?: string;
+  readonly diagramService?: DiagramRenderService;
+  readonly ownerId?: string;
 }
 
 export async function exportDeckToPdf(
@@ -24,11 +32,33 @@ export async function exportDeckToPdf(
     );
   }
 
-  const is4x3 = deck.metadata.aspectRatio === '4:3';
+  let resolvedDeck = deck;
+  if (hasPendingDiagrams(deck)) {
+    const ownerId =
+      options?.ownerId ?? `export:pdf:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+
+    if (options?.diagramService) {
+      resolvedDeck = await resolveDeckDiagrams(deck, options.diagramService, {
+        ownerId,
+      });
+    } else {
+      const { createDiagramRenderService } = await import('../diagram/internal-diagnostics.js');
+      const tempService = createDiagramRenderService({ browserPath });
+      try {
+        resolvedDeck = await resolveDeckDiagrams(deck, tempService, { ownerId });
+      } finally {
+        await tempService.dispose();
+      }
+    }
+
+    assertDeckDiagramsSuccessful(resolvedDeck);
+  }
+
+  const is4x3 = resolvedDeck.metadata.aspectRatio === '4:3';
   const widthIn = is4x3 ? '10in' : '13.333in';
   const heightIn = '7.5in';
 
-  const baseHtml = renderDeckToHtml(deck, {
+  const baseHtml = renderDeckToHtml(resolvedDeck, {
     baseDir: options?.baseDir,
     allowedRoots: options?.allowedRoots,
   });

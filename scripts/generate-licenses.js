@@ -108,20 +108,40 @@ function extractLicenseId(pkg) {
 export async function generateThirdPartyLicenses(metafile) {
   let mf = metafile;
   if (!mf) {
-    const res = await esbuild.build({
-      entryPoints: [path.join(rootDir, 'src/extension.ts')],
-      bundle: true,
-      format: 'cjs',
-      platform: 'node',
-      target: 'node20',
-      outfile: path.join(rootDir, 'dist/extension.cjs'),
-      external: ['vscode'],
-      metafile: true,
-      legalComments: 'eof',
-      minify: true,
-      write: false,
-    });
-    mf = res.metafile;
+    const [nodeRes, browserRes] = await Promise.all([
+      esbuild.build({
+        entryPoints: [path.join(rootDir, 'src/extension.ts')],
+        bundle: true,
+        format: 'cjs',
+        platform: 'node',
+        target: 'node22',
+        outfile: path.join(rootDir, 'dist/extension.cjs'),
+        external: ['vscode'],
+        define: {
+          'import.meta.url': '""',
+        },
+        metafile: true,
+        legalComments: 'eof',
+        minify: true,
+        write: false,
+      }),
+      esbuild.build({
+        entryPoints: [path.join(rootDir, 'src/diagram/browser/mermaid-renderer-entry.ts')],
+        bundle: true,
+        format: 'iife',
+        platform: 'browser',
+        target: 'es2022',
+        outfile: path.join(rootDir, 'dist/mermaid-renderer.js'),
+        metafile: true,
+        legalComments: 'eof',
+        minify: true,
+        write: false,
+      }),
+    ]);
+    mf = {
+      inputs: { ...nodeRes.metafile.inputs, ...browserRes.metafile.inputs },
+      outputs: { ...nodeRes.metafile.outputs, ...browserRes.metafile.outputs },
+    };
   }
 
   const packageDirs = new Map();
@@ -210,8 +230,14 @@ Total bundled third-party packages: ${sortedPackages.length}
   }
 
   const outputFilePath = path.join(rootDir, 'THIRD_PARTY_LICENSES.txt');
-  const fullText = sections.join('\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  fs.writeFileSync(outputFilePath, fullText, 'utf8');
+  const fullText = sections
+    .join('\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n');
+  fs.writeFileSync(outputFilePath, fullText.trimEnd() + '\n', 'utf8');
   console.log(`Generated ${outputFilePath} (${sortedPackages.length} packages)`);
   return outputFilePath;
 }

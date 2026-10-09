@@ -1,11 +1,15 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { runTests } from '@vscode/test-electron';
 
-const extensionDevelopmentPath = path.resolve(__dirname, '../..');
+const stagingPath = path.resolve(__dirname, 'staging');
+const extensionDevelopmentPath = fs.existsSync(path.join(stagingPath, 'package.json'))
+  ? stagingPath
+  : path.resolve(__dirname, '../..');
 const extensionTestsPath = path.resolve(__dirname, 'suite/index.js');
 
 async function main(): Promise<void> {
-  const version = process.env.VSCODE_VERSION || '1.90.0';
+  const version = process.env.VSCODE_VERSION || '1.101.0';
   console.log(`Executing VS Code extension tests using version: ${version}`);
 
   const hadElectronRunAsNode = Object.prototype.hasOwnProperty.call(

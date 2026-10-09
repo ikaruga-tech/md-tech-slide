@@ -25,6 +25,17 @@ export interface PptxStructureInfo {
     readonly notesText?: string;
     readonly textContents: readonly string[];
     readonly textRuns: readonly PptxTextRunInfo[];
+    readonly rels: readonly {
+      readonly id: string;
+      readonly type: string;
+      readonly target: string;
+    }[];
+  }[];
+  readonly mediaFiles: readonly string[];
+  readonly contentTypes: readonly {
+    readonly extension?: string;
+    readonly partName?: string;
+    readonly contentType: string;
   }[];
 }
 
@@ -147,6 +158,27 @@ export async function inspectPptxBuffer(buffer: Buffer | Uint8Array): Promise<Pp
 
       const textRuns = extractTextRunsFromXml(xml);
 
+      // スライドのリレーションXMLの解析
+      const relsFilename = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+      const relsXml = await zip.file(relsFilename)?.async('string');
+      const rels: { id: string; type: string; target: string }[] = [];
+      if (relsXml) {
+        const relMatches = relsXml.matchAll(/<Relationship\b([^>]*)\/>/g);
+        for (const match of relMatches) {
+          const attrs = match[1] ?? '';
+          const idMatch = attrs.match(/\bId="([^"]*)"/);
+          const typeMatch = attrs.match(/\bType="([^"]*)"/);
+          const targetMatch = attrs.match(/\bTarget="([^"]*)"/);
+          if (idMatch && typeMatch && targetMatch) {
+            rels.push({
+              id: idMatch[1] ?? '',
+              type: typeMatch[1] ?? '',
+              target: targetMatch[1] ?? '',
+            });
+          }
+        }
+      }
+
       return {
         slideNumber: slideNum,
         xml,
@@ -156,9 +188,40 @@ export async function inspectPptxBuffer(buffer: Buffer | Uint8Array): Promise<Pp
         notesText,
         textContents: textMatches,
         textRuns,
+        rels,
       };
     })
   );
+
+  // 3. [Content_Types].xml からコンテンツタイプを抽出
+  const contentTypesXml = (await zip.file('[Content_Types].xml')?.async('string')) ?? '';
+  const contentTypes: { extension?: string; partName?: string; contentType: string }[] = [];
+  if (contentTypesXml) {
+    const defaultMatches = contentTypesXml.matchAll(/<Default\b([^>]*)\/>/g);
+    for (const match of defaultMatches) {
+      const attrs = match[1] ?? '';
+      const extMatch = attrs.match(/\bExtension="([^"]*)"/);
+      const ctMatch = attrs.match(/\bContentType="([^"]*)"/);
+      if (ctMatch) {
+        contentTypes.push({
+          extension: extMatch ? extMatch[1] : undefined,
+          contentType: ctMatch[1] ?? '',
+        });
+      }
+    }
+    const overrideMatches = contentTypesXml.matchAll(/<Override\b([^>]*)\/>/g);
+    for (const match of overrideMatches) {
+      const attrs = match[1] ?? '';
+      const partMatch = attrs.match(/\bPartName="([^"]*)"/);
+      const ctMatch = attrs.match(/\bContentType="([^"]*)"/);
+      if (ctMatch) {
+        contentTypes.push({
+          partName: partMatch ? partMatch[1] : undefined,
+          contentType: ctMatch[1] ?? '',
+        });
+      }
+    }
+  }
 
   return {
     slideCount: slides.length,
@@ -169,5 +232,7 @@ export async function inspectPptxBuffer(buffer: Buffer | Uint8Array): Promise<Pp
       heightInches,
     },
     slides,
+    mediaFiles: Object.keys(zip.files).filter((name) => name.startsWith('ppt/media/')),
+    contentTypes,
   };
 }

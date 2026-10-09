@@ -12,10 +12,19 @@ Unlike conventional Markdown slide converters that export slides as static flatt
 
 - Native PowerPoint (PPTX) Generation: Produces editable native shapes, text boxes, and tables via PptxGenJS instead of rasterized images.
 - Multi-Column Slot Layouts: Flexible 2-column, 3-column, and custom ratio (e.g. `ratio="2:1"`) layouts using intuitive Fenced Divs syntax (`::: columns`, `::: column`).
+- Mermaid Diagram Support: Embedded vector SVG diagrams (flowcharts, sequence diagrams, class diagrams, etc.) directly into PowerPoint OpenXML (`ppt/media/*.svg`) and high-fidelity PDF slides.
 - Syntax Highlighted Code Blocks: Accurate code coloring powered by Shiki, mapped directly to PowerPoint formatted text frames.
 - Real-Time Live Preview: Instant Webview preview alongside your Markdown editor with two-way synchronized scrolling.
 - High-Quality PDF Export: Automated local browser detection (Google Chrome or Microsoft Edge) using puppeteer-core for zero-config PDF printing.
-- Editor Intelligence & DX: Built-in snippet templates for slide delimiters and column blocks, plus real-time syntax diagnostic warnings.
+- Editor Intelligence & DX: Built-in snippet templates for slide delimiters, column blocks, and Mermaid diagrams, plus real-time syntax diagnostic warnings.
+
+---
+
+## Requirements
+
+- Visual Studio Code `^1.101.0` or higher
+- Node.js `>=22.12.0` (Node 20 is not supported)
+- Google Chrome or Microsoft Edge installed locally (for PDF export and Mermaid diagram rendering)
 
 ---
 
@@ -149,7 +158,22 @@ export interface SlideDeck {
   :::
   :::
 
-````
+`````
+
+### Mermaid Diagrams
+
+Write Mermaid diagrams inside ` ```mermaid ` code fences. Diagrams are rendered to vector SVG, embedded directly into PowerPoint OpenXML (`ppt/media/*.svg`), and cleanly scaled in PDF exports:
+
+````markdown
+```mermaid
+flowchart TD
+  A[Markdown Input] --> B[Slide Parser]
+  B --> C[Slide Deck IR]
+  C --> D[Preview / PPTX / PDF]
+```
+`````
+
+Supported diagram types include flowcharts (`flowchart`, `graph`), sequence diagrams (`sequenceDiagram`), class diagrams (`classDiagram`), state diagrams (`stateDiagram-v2`), entity-relationship diagrams (`erDiagram`), and more. Mermaid blocks can also be used inside multi-column slots (`::: column`).
 
 ### Speaker Notes
 
@@ -159,7 +183,7 @@ Add presentation notes for each slide using `::: note` blocks or HTML comment no
 ::: note
 Explain the key architectural advantages of native text boxes over rasterized images.
 :::
-````
+```
 
 ---
 
@@ -191,7 +215,8 @@ Customize extension behavior through the VS Code Settings editor:
 
 - `mdTechSlide.defaultTheme`: Default presentation theme (`default`, `corporate`, `dark`).
 - `mdTechSlide.defaultAspectRatio`: Default slide aspect ratio (`16:9`, `4:3`).
-- `mdTechSlide.export.browserPath`: Custom executable path for Google Chrome or Microsoft Edge for PDF rendering.
+- `mdTechSlide.browserPath`: Custom executable path for Google Chrome or Microsoft Edge (used for Mermaid diagram rendering and PDF export).
+- `mdTechSlide.export.browserPath`: Alias setting for custom browser executable path.
 
 ---
 

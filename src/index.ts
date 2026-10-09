@@ -6,3 +6,4 @@ export * from './generator/index.js';
 export * from './validator/index.js';
 export * from './renderer/index.js';
 export * from './export/index.js';
+export * from './diagram/index.js';

@@ -237,4 +237,145 @@ Default body
       expect(footerRun?.fontSizePt).toBe(10);
     });
   });
+
+  describe('Mermaid vector SVG embedding in PPTX OpenXML', () => {
+    it('embeds vector SVG in ppt/media/*.svg and places picture shape within bounds', async () => {
+      const markdown = `---
+title: "Vector Diagram Presentation"
+theme: corporate
+---
+
+# Architecture Overview
+
+\`\`\`mermaid
+flowchart TD
+    Client --> Server
+    Server --> Database
+\`\`\`
+
+########
+
+# Multi-column with Diagram
+
+::: columns
+::: column
+### Left Details
+Explanation text here.
+:::
+::: column
+\`\`\`mermaid
+sequenceDiagram
+    A->>B: Ping
+    B-->>A: Pong
+\`\`\`
+:::
+:::
+`;
+      const deck = parseMarkdownToSlideDeck(markdown);
+      const ownerId = `pptx-test-vector-${Date.now()}`;
+      const pptx = await generatePresentation(deck, { ownerId });
+      const buffer = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer;
+
+      const info = await inspectPptxBuffer(buffer);
+
+      // Verify slide count
+      expect(info.slideCount).toBe(2);
+
+      // Verify SVG vector media files exist in ppt/media/
+      const svgMedia = info.mediaFiles.filter((f) => f.endsWith('.svg'));
+      expect(svgMedia.length).toBeGreaterThanOrEqual(2);
+
+      // Verify [Content_Types].xml defines SVG content type
+      const svgContentType = info.contentTypes.find(
+        (ct) => ct.extension === 'svg' || ct.contentType === 'image/svg+xml'
+      );
+      expect(svgContentType).toBeDefined();
+      expect(svgContentType?.contentType).toBe('image/svg+xml');
+
+      // Verify both slides contain picture shape elements (<p:pic>)
+      expect(info.slides[0]!.hasImage).toBe(true);
+      expect(info.slides[1]!.hasImage).toBe(true);
+
+      // Verify slide 1 rels link to svg media
+      const slide1SvgRels = info.slides[0]!.rels.filter((r) => r.target.endsWith('.svg'));
+      expect(slide1SvgRels.length).toBeGreaterThanOrEqual(1);
+
+      // Verify slide 1 contains OpenXML vector SVG extension (<asvg:svgBlip>)
+      expect(info.slides[0]!.xml).toContain('asvg:svgBlip');
+      expect(info.slides[0]!.xml).toContain(`r:embed="${slide1SvgRels[0]!.id}"`);
+
+      // Verify slide 2 rels link to svg media
+      const slide2SvgRels = info.slides[1]!.rels.filter((r) => r.target.endsWith('.svg'));
+      expect(slide2SvgRels.length).toBeGreaterThanOrEqual(1);
+
+      // Verify slide 2 contains OpenXML vector SVG extension (<asvg:svgBlip>)
+      expect(info.slides[1]!.xml).toContain('asvg:svgBlip');
+      expect(info.slides[1]!.xml).toContain(`r:embed="${slide2SvgRels[0]!.id}"`);
+
+      // Verify slide 2 contains column text alongside the diagram
+      expect(info.slides[1]!.textContents.join(' ')).toContain('Explanation text here.');
+    }, 20000);
+
+    it('embeds multiple diagrams in a single slide without media filename or relId collisions', async () => {
+      const markdown = `---
+title: "Dual Diagram Presentation"
+---
+
+# Parallel Architecture
+
+::: columns
+::: column
+\`\`\`mermaid
+flowchart TD
+    A[Start] --> B[Process 1]
+\`\`\`
+:::
+::: column
+\`\`\`mermaid
+flowchart TD
+    C[Start] --> D[Process 2]
+\`\`\`
+:::
+:::
+`;
+      const deck = parseMarkdownToSlideDeck(markdown);
+      const ownerId = `pptx-test-dual-${Date.now()}`;
+      const pptx = await generatePresentation(deck, { ownerId });
+      const buffer = (await pptx.write({ outputType: 'nodebuffer' })) as Buffer;
+
+      const info = await inspectPptxBuffer(buffer);
+
+      expect(info.slideCount).toBe(1);
+      const slide = info.slides[0]!;
+
+      // 2つの異なるSVGメディアファイルが生成されていること
+      const svgMedia = info.mediaFiles.filter((f) => f.endsWith('.svg'));
+      expect(svgMedia.length).toBe(2);
+      expect(new Set(svgMedia).size).toBe(2);
+
+      // [Content_Types].xml に image/svg+xml が登録されていること
+      const svgContentType = info.contentTypes.find(
+        (ct) => ct.extension === 'svg' || ct.contentType === 'image/svg+xml'
+      );
+      expect(svgContentType).toBeDefined();
+      expect(svgContentType?.contentType).toBe('image/svg+xml');
+
+      // スライドのリレーションが2つの異なるSVGメディアを指し、リレーションIDも一意であること
+      const svgRels = slide.rels.filter((r) => r.target.endsWith('.svg'));
+      expect(svgRels.length).toBe(2);
+      const relIds = svgRels.map((r) => r.id);
+      expect(new Set(relIds).size).toBe(2);
+      const relTargets = svgRels.map((r) => r.target);
+      expect(new Set(relTargets).size).toBe(2);
+
+      // <p:pic> がスライドXML内に2つ存在すること
+      const picMatches = Array.from(slide.xml.matchAll(/<p:pic[\s>]/g));
+      expect(picMatches.length).toBe(2);
+
+      // 各ピクチャ要素が asvg:svgBlip でそれぞれのSVGリレーションを参照していること
+      for (const rel of svgRels) {
+        expect(slide.xml).toContain(`r:embed="${rel.id}"`);
+      }
+    }, 20000);
+  });
 });

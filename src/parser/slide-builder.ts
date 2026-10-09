@@ -11,7 +11,11 @@ import type {
 } from '../types/ir.js';
 import { parseSingleBlock } from './block-parser.js';
 
-export function buildSlideFromTokens(tokens: readonly Token[], index: number): Slide {
+export function buildSlideFromTokens(
+  tokens: readonly Token[],
+  index: number,
+  slideStartLine: number = 0
+): Slide {
   let header: HeaderSlot | undefined;
   let note: string | undefined;
   let pageNumber: boolean | undefined;
@@ -54,7 +58,7 @@ export function buildSlideFromTokens(tokens: readonly Token[], index: number): S
 
     // マルチカラムブロックの検知
     if (token.type === 'container_columns_open') {
-      const colsRes = parseColumnsContainer(tokens, i);
+      const colsRes = parseColumnsContainer(tokens, i, slideStartLine);
       bodySlot = colsRes.columnsSlot;
       i = colsRes.nextIndex;
       continue;
@@ -73,7 +77,7 @@ export function buildSlideFromTokens(tokens: readonly Token[], index: number): S
     }
 
     // 通常のブロック要素
-    const blockRes = parseSingleBlock(tokens, i);
+    const blockRes = parseSingleBlock(tokens, i, slideStartLine);
     rootElements.push(...blockRes.elements);
     i = blockRes.nextIndex;
   }
@@ -137,7 +141,8 @@ function parseNoteContainer(
 
 function parseColumnsContainer(
   tokens: readonly Token[],
-  startIndex: number
+  startIndex: number,
+  slideStartLine: number = 0
 ): { columnsSlot: ColumnsSlot; nextIndex: number } {
   const openToken = tokens[startIndex];
   const info = openToken ? openToken.info : '';
@@ -175,7 +180,7 @@ function parseColumnsContainer(
           break;
         }
 
-        const blockRes = parseSingleBlock(tokens, i);
+        const blockRes = parseSingleBlock(tokens, i, slideStartLine);
         colElements.push(...blockRes.elements);
         i = blockRes.nextIndex;
       }

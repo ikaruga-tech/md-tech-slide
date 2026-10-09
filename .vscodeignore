@@ -10,6 +10,7 @@ generated/**
 node_modules/**
 dist/**
 !dist/extension.cjs
+!dist/mermaid-renderer.js
 !THIRD_PARTY_LICENSES.txt
 .editorconfig
 .gitattributes
@@ -22,7 +23,9 @@ package-lock.json
 tsconfig.json
 tsconfig.test.json
 vitest.config.ts
+vitest.mermaid.config.ts
 vitest.e2e.config.ts
+vitest.browser-e2e.config.ts
 eslint.config.js
 esbuild.js
 *.tsbuildinfo

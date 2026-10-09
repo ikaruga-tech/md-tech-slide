@@ -1,12 +1,18 @@
 import PptxGenJSModule from 'pptxgenjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { SlideDeck } from '../types/ir.js';
+import type { SlideDeck, ResolvedSlideDeck } from '../types/ir.js';
 import type { PptxInstance } from '../types/pptx.js';
 import { resolveTheme, getDeckTypography } from '../theme/index.js';
 import { getSlideGrid } from '../layout/grid.js';
 import { renderSlide } from './slide-renderer.js';
 import type { RenderOptions } from './element-renderer.js';
+import {
+  resolveDeckDiagrams,
+  hasPendingDiagrams,
+  assertDeckDiagramsSuccessful,
+  type DiagramRenderService,
+} from '../diagram/index.js';
 
 // NodeNext / CommonJS の相互運用のためコンストラクタを取得
 const PptxGenJSConstructor = (typeof PptxGenJSModule === 'function'
@@ -14,8 +20,45 @@ const PptxGenJSConstructor = (typeof PptxGenJSModule === 'function'
   : (PptxGenJSModule as unknown as { default: new () => PptxInstance })
       .default) as unknown as new () => PptxInstance;
 
+export interface PptxExportOptions extends RenderOptions {
+  readonly diagramService?: DiagramRenderService;
+  readonly browserPath?: string;
+  readonly ownerId?: string;
+}
+
 export async function generatePresentation(
   deck: SlideDeck,
+  options?: PptxExportOptions
+): Promise<PptxInstance> {
+  let resolvedDeck = deck;
+  if (hasPendingDiagrams(deck)) {
+    const ownerId =
+      options?.ownerId ?? `export:pptx:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+
+    if (options?.diagramService) {
+      resolvedDeck = await resolveDeckDiagrams(deck, options.diagramService, {
+        ownerId,
+      });
+    } else {
+      const { createDiagramRenderService } = await import('../diagram/internal-diagnostics.js');
+      const tempService = createDiagramRenderService({ browserPath: options?.browserPath });
+      try {
+        resolvedDeck = await resolveDeckDiagrams(deck, tempService, {
+          ownerId,
+        });
+      } finally {
+        await tempService.dispose();
+      }
+    }
+
+    assertDeckDiagramsSuccessful(resolvedDeck);
+  }
+
+  return generateResolvedPresentation(resolvedDeck as ResolvedSlideDeck, options);
+}
+
+export async function generateResolvedPresentation(
+  deck: ResolvedSlideDeck,
   options?: RenderOptions
 ): Promise<PptxInstance> {
   const pptx = new PptxGenJSConstructor();
@@ -55,21 +98,40 @@ export async function generatePresentation(
 
 export async function generatePresentationWithDiagnostics(
   deck: SlideDeck,
-  options?: RenderOptions
+  options?: PptxExportOptions
 ): Promise<{
   pptx: PptxInstance;
   diagnostics: import('../layout/index.js').LayoutDiagnosticIssue[];
 }> {
+  let resolvedDeck = deck;
+  if (hasPendingDiagrams(deck)) {
+    if (options?.diagramService) {
+      resolvedDeck = await resolveDeckDiagrams(deck, options.diagramService, {
+        ownerId: 'export:pptx',
+      });
+    } else {
+      const { createDiagramRenderService } = await import('../diagram/internal-diagnostics.js');
+      const tempService = createDiagramRenderService({ browserPath: options?.browserPath });
+      try {
+        resolvedDeck = await resolveDeckDiagrams(deck, tempService, {
+          ownerId: 'export:pptx',
+        });
+      } finally {
+        await tempService.dispose();
+      }
+    }
+  }
+
   const { analyzeLayoutOverflow } = await import('../layout/index.js');
-  const diagnostics = analyzeLayoutOverflow(deck);
-  const pptx = await generatePresentation(deck, options);
+  const diagnostics = analyzeLayoutOverflow(resolvedDeck);
+  const pptx = await generateResolvedPresentation(resolvedDeck as ResolvedSlideDeck, options);
   return { pptx, diagnostics };
 }
 
 export async function savePresentationToFile(
   deck: SlideDeck,
   outputPath: string,
-  options?: RenderOptions
+  options?: PptxExportOptions
 ): Promise<void> {
   const pptx = await generatePresentation(deck, options);
 
