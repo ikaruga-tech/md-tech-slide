@@ -1,5 +1,10 @@
 # Global Agent Instructions
 
+## 動作環境と前提条件
+
+- Node.js >= 22.12.0（Node 20 は非サポート）
+- Visual Studio Code >= 1.101.0 / `@types/vscode` ^1.101.0
+
 ## このプロジェクトでは特に重要なルール
 
 - Coreにビジネスロジックを集約し、CLIやVSCode拡張はCoreを呼び出すだけにする。

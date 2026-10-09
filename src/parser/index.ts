@@ -1,6 +1,6 @@
 import type { SlideDeck, Slide } from '../types/ir.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { splitSlides } from './slide-splitter.js';
+import { splitSlidesWithPositions } from './slide-splitter.js';
 import { createSlideMarkdownIt } from './markdown-it-setup.js';
 import { buildSlideFromTokens } from './slide-builder.js';
 import { resolveTheme } from '../theme/index.js';
@@ -15,13 +15,13 @@ export function parseMarkdownToSlideDeck(
   markdown: string,
   defaults?: ParseDeckDefaults
 ): SlideDeck {
-  const { metadata, content } = parseFrontmatter(markdown);
-  const slideTexts = splitSlides(content);
+  const { metadata, content, contentStartLine } = parseFrontmatter(markdown);
+  const slideSections = splitSlidesWithPositions(content, contentStartLine);
   const md = createSlideMarkdownIt();
 
-  const slides: Slide[] = slideTexts.map((text, index) => {
-    const tokens = md.parse(text, {});
-    return buildSlideFromTokens(tokens, index);
+  const slides: Slide[] = slideSections.map((section, index) => {
+    const tokens = md.parse(section.content, {});
+    return buildSlideFromTokens(tokens, index, section.startLine);
   });
 
   const rawRatio = metadata.aspectRatio ?? defaults?.defaultAspectRatio;

@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 22, 24]
+        node-version: [22, 24]
 
     steps:
       - name: Checkout code
@@ -24,6 +24,10 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+
+      - name: Verify Node.js version (>=22.12.0)
+        run: |
+          node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 12)) { console.error('Node.js >= 22.12.0 required, got ' + process.version); process.exit(1); } console.log('Node.js version verified: ' + process.version);"
 
       - name: Install system dependencies (Xvfb & Chromium libraries)
         run: |
@@ -48,11 +52,11 @@ jobs:
       - name: Resolve Chrome executable path and verify
         run: |
           CHROME_PATH=$(node scripts/resolve-chrome.js)
-          echo "Resolved Chrome Path: $CHROME_PATH"
           if [ ! -x "$CHROME_PATH" ]; then
-            echo "Error: Resolved Chrome executable not found or not executable: $CHROME_PATH"
+            echo "Error: Resolved Chrome executable not found or not executable"
             exit 1
           fi
+          echo "Chrome executable resolved and verified successfully."
           echo "PUPPETEER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
 
       - name: Check code formatting
@@ -69,6 +73,16 @@ jobs:
 
       - name: Run unit and structural tests
         run: npm test
+
+      - name: Run browser launch E2E tests
+        run: npm run test:browser-e2e
+        env:
+          CI: true
+
+      - name: Run Mermaid real browser tests
+        run: npm run test:mermaid
+        env:
+          CI: true
 
       - name: Run PDF E2E tests
         run: npm run test:pdf-e2e
@@ -170,6 +184,11 @@ jobs:
 
       - name: Run unit and structural tests
         run: npm test
+
+      - name: Run browser launch E2E tests
+        run: npm run test:browser-e2e
+        env:
+          CI: true
 
       - name: Package VSIX
         run: npm run package:vsix

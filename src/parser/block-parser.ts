@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import type Token from 'markdown-it/lib/token.mjs';
 import type {
   BlockElement,
@@ -7,6 +8,7 @@ import type {
   ListItem,
   CodeBlock,
   TableBlock,
+  DiagramBlock,
 } from '../types/ir.js';
 import { parseInlineTokens } from './inline-parser.js';
 
@@ -163,7 +165,8 @@ export function parseTable(
 
 export function parseSingleBlock(
   tokens: readonly Token[],
-  index: number
+  index: number,
+  slideStartLine: number = 0
 ): { elements: readonly BlockElement[]; nextIndex: number } {
   const token = tokens[index];
   if (!token) {
@@ -216,7 +219,52 @@ export function parseSingleBlock(
       return { elements: [], nextIndex: index + 2 };
     }
 
-    case 'fence':
+    case 'fence': {
+      const infoTokens = token.info ? token.info.trim().split(/\s+/) : [];
+      const lang = infoTokens[0] ? infoTokens[0].toLowerCase() : '';
+
+      if (lang === 'mermaid') {
+        const source = token.content.replace(/\n$/, '');
+        const relativeLine = token.map ? token.map[0] : 0;
+        const startLine = slideStartLine + relativeLine;
+        const configId = 'strict-default';
+        const hash = crypto.createHash('sha256').update(source).digest('hex');
+
+        if (source.trim().length === 0) {
+          const emptyBlock: DiagramBlock = {
+            type: 'diagram',
+            kind: 'mermaid',
+            source,
+            startLine,
+            configId,
+            hash,
+            status: 'error',
+            errorCode: 'mermaid-empty-source',
+            errorMessage: 'Mermaid diagram source is empty.',
+          };
+          return { elements: [emptyBlock], nextIndex: index + 1 };
+        }
+
+        const diagramBlock: DiagramBlock = {
+          type: 'diagram',
+          kind: 'mermaid',
+          source,
+          startLine,
+          configId,
+          hash,
+          status: 'pending',
+        };
+        return { elements: [diagramBlock], nextIndex: index + 1 };
+      }
+
+      const codeBlock: CodeBlock = {
+        type: 'code',
+        code: token.content.replace(/\n$/, ''),
+        language: token.info ? token.info.trim() : undefined,
+      };
+      return { elements: [codeBlock], nextIndex: index + 1 };
+    }
+
     case 'code_block': {
       const codeBlock: CodeBlock = {
         type: 'code',

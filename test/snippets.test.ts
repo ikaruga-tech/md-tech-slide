@@ -26,6 +26,7 @@ describe('snippets', () => {
       'Three Columns',
       'Ratio Columns',
       'Speaker Note',
+      'Mermaid Diagram',
     ];
 
     for (const name of requiredSnippets) {

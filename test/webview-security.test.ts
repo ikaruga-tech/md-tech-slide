@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseMarkdownToSlideDeck } from '../src/parser/index.js';
 import { renderDeckToHtml } from '../src/renderer/index.js';
+import type { ResolvedDiagramBlock } from '../src/types/ir.js';
 
 describe('webview-security', () => {
   it('renders HTML with strict CSP and matching nonces when provided', () => {
@@ -138,5 +139,78 @@ Right
         '.columns-container.cols-count-2 { grid-template-columns: repeat(2, 1fr); }'
       );
     }
+  });
+
+  it('injects dynamic SHA-256 style hashes into CSP for resolved Diagram SVG styles', async () => {
+    const crypto = await import('node:crypto');
+    const markdown = `# Diagram Slide
+
+\`\`\`mermaid
+graph TD; A-->B;
+\`\`\`
+`;
+    const deck = parseMarkdownToSlideDeck(markdown);
+    const styleContent = '.node { fill: #fff; }';
+    const expectedHash = crypto.createHash('sha256').update(styleContent, 'utf8').digest('base64');
+
+    const body = deck.slides[0]!.slots.body;
+    if (body.type === 'single') {
+      const diagramEl: ResolvedDiagramBlock = {
+        type: 'diagram',
+        kind: 'mermaid',
+        source: 'graph TD; A-->B;',
+        startLine: 2,
+        configId: 'default',
+        hash: 'abc',
+        status: 'success',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg"><style>${styleContent}</style><g/></svg>`,
+      };
+      deck.slides[0]!.slots.body = {
+        type: 'single',
+        elements: [diagramEl],
+      };
+    }
+
+    const nonce = 'security-nonce-xyz';
+    const cspSource = 'vscode-webview:';
+    const html = renderDeckToHtml(deck, { nonce, cspSource });
+
+    expect(html).toContain(`'sha256-${expectedHash}'`);
+    expect(html).toContain(`style-src ${cspSource} 'nonce-${nonce}' 'sha256-${expectedHash}';`);
+    expect(html).toContain('<div class="slide-diagram"><svg');
+  });
+
+  it('renders accessible error card when diagram rendering fails', () => {
+    const markdown = `# Error Slide
+
+\`\`\`mermaid
+graph TD; A-->B;
+\`\`\`
+`;
+    const deck = parseMarkdownToSlideDeck(markdown);
+    const body = deck.slides[0]!.slots.body;
+    if (body.type === 'single') {
+      const diagramEl: ResolvedDiagramBlock = {
+        type: 'diagram',
+        kind: 'mermaid',
+        source: 'graph TD; A-->B;',
+        startLine: 2,
+        configId: 'default',
+        hash: 'abc',
+        status: 'error',
+        errorCode: 'mermaid-invalid-syntax',
+        errorMessage: 'Invalid syntax at line 1',
+      };
+      deck.slides[0]!.slots.body = {
+        type: 'single',
+        elements: [diagramEl],
+      };
+    }
+
+    const html = renderDeckToHtml(deck);
+    expect(html).toContain('class="slide-diagram-error"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('mermaid-invalid-syntax');
+    expect(html).toContain('Invalid syntax at line 1');
   });
 });

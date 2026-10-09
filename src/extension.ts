@@ -5,6 +5,16 @@ import { parseMarkdownToSlideDeck } from './parser/index.js';
 import { exportDeckToPptx, exportDeckToPdf } from './export/index.js';
 import { SlidePreviewPanel } from './webview/index.js';
 import { getAllowedResourceRoots } from './resource/index.js';
+import { DiagramRenderService } from './diagram/index.js';
+
+declare const __TEST_MODE__: boolean;
+
+export interface ExtensionApi {
+  readonly getPreviewPanel: () => typeof SlidePreviewPanel.currentPanel;
+  readonly getDiagramService: () => DiagramRenderService | undefined;
+}
+
+let diagramRenderService: DiagramRenderService | undefined;
 
 function isMarkdownDocument(doc: vscode.TextDocument): boolean {
   return (
@@ -56,9 +66,19 @@ async function resolveTargetDocument(uri?: vscode.Uri): Promise<vscode.TextDocum
   return undefined;
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): ExtensionApi {
+  // 0. Mermaidレンダリングサービスの初期化
+  const config = vscode.workspace.getConfiguration('mdTechSlide');
+  const browserPath =
+    config.get<string>('browserPath')?.trim() ||
+    config.get<string>('export.browserPath')?.trim() ||
+    undefined;
+
+  diagramRenderService = new DiagramRenderService({ browserPath });
+  context.subscriptions.push(diagramRenderService);
+
   // 1. スライド構文バリデーション機能の初期化
-  const diagnosticProvider = new SlideDiagnosticProvider();
+  const diagnosticProvider = new SlideDiagnosticProvider(diagramRenderService);
   context.subscriptions.push(diagnosticProvider);
 
   // 2. プレビュー表示コマンドの登録
@@ -82,7 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.showWarningMessage('Please open a Markdown file to view slide preview.');
         return;
       }
-      SlidePreviewPanel.createOrShow(editor);
+      SlidePreviewPanel.createOrShow(editor, undefined, diagramRenderService);
     }
   );
   context.subscriptions.push(openPreviewCommand);
@@ -132,7 +152,11 @@ export function activate(context: vscode.ExtensionContext): void {
             const allowedRoots = getAllowedResourceRoots(docPath, workspaceFolders);
             const baseDir = docPath ? path.dirname(docPath) : workspaceFolders?.[0];
 
-            await exportDeckToPptx(deck, targetUri.fsPath, { baseDir, allowedRoots });
+            await exportDeckToPptx(deck, targetUri.fsPath, {
+              baseDir,
+              allowedRoots,
+              diagramService: diagramRenderService,
+            });
           }
         );
 
@@ -182,7 +206,10 @@ export function activate(context: vscode.ExtensionContext): void {
             const config = vscode.workspace.getConfiguration('mdTechSlide');
             const defaultTheme = config.get<string>('defaultTheme') || 'default';
             const defaultAspectRatio = config.get<string>('defaultAspectRatio') || '16:9';
-            const browserPath = config.get<string>('export.browserPath')?.trim() || undefined;
+            const browserPath =
+              config.get<string>('browserPath')?.trim() ||
+              config.get<string>('export.browserPath')?.trim() ||
+              undefined;
 
             const markdown = document.getText();
             const deck = parseMarkdownToSlideDeck(markdown, {
@@ -193,7 +220,12 @@ export function activate(context: vscode.ExtensionContext): void {
             const allowedRoots = getAllowedResourceRoots(docPath, workspaceFolders);
             const baseDir = docPath ? path.dirname(docPath) : workspaceFolders?.[0];
 
-            await exportDeckToPdf(deck, targetUri.fsPath, { baseDir, allowedRoots, browserPath });
+            await exportDeckToPdf(deck, targetUri.fsPath, {
+              baseDir,
+              allowedRoots,
+              browserPath,
+              diagramService: diagramRenderService,
+            });
           }
         );
 
@@ -208,7 +240,24 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   context.subscriptions.push(exportPDFCommand);
 
-  // 5. リアルタイムプレビュー更新（デバウンス付きテキスト変更検知）
+  // 5. 設定変更検知とブラウザパスの動的更新
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration('mdTechSlide.browserPath') ||
+        e.affectsConfiguration('mdTechSlide.export.browserPath')
+      ) {
+        const cfg = vscode.workspace.getConfiguration('mdTechSlide');
+        const newPath =
+          cfg.get<string>('browserPath')?.trim() ||
+          cfg.get<string>('export.browserPath')?.trim() ||
+          undefined;
+        diagramRenderService?.updateBrowserPath(newPath);
+      }
+    })
+  );
+
+  // 6. リアルタイムプレビュー更新（デバウンス付きテキスト変更検知）
   let updateDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((e) => {
@@ -220,13 +269,18 @@ export function activate(context: vscode.ExtensionContext): void {
           const activeEditor = vscode.window.activeTextEditor;
           if (activeEditor && activeEditor.document.uri.toString() === e.document.uri.toString()) {
             SlidePreviewPanel.currentPanel?.updateContent(activeEditor);
+          } else if (
+            SlidePreviewPanel.currentPanel?.activeDocument?.uri.toString() ===
+            e.document.uri.toString()
+          ) {
+            SlidePreviewPanel.currentPanel.updateContent();
           }
         }, 250);
       }
     })
   );
 
-  // 6. カーソル位置変更に応じたプレビュースクロール同期
+  // 7. カーソル位置変更に応じたプレビュースクロール同期
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorSelection((e) => {
       if (SlidePreviewPanel.currentPanel && e.textEditor.document.languageId === 'markdown') {
@@ -235,7 +289,7 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  // 7. アクティブエディタ切り替え時のプレビュー連動
+  // 8. アクティブエディタ切り替え時のプレビュー連動
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (SlidePreviewPanel.currentPanel && editor && editor.document.languageId === 'markdown') {
@@ -243,8 +297,26 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
+
+  const api: ExtensionApi = {
+    getPreviewPanel: () => SlidePreviewPanel.currentPanel,
+    getDiagramService: () => diagramRenderService,
+  };
+
+  if (__TEST_MODE__) {
+    (api as unknown as Record<string, unknown>)['setPreviewTestObserver'] = (
+      observer?: (msg: Record<string, unknown>) => void
+    ) => {
+      SlidePreviewPanel.testObserver = observer;
+    };
+  }
+
+  return api;
 }
 
 export function deactivate(): void {
-  // リソースの破棄処理（subscriptions 経由で自動解放）
+  if (diagramRenderService) {
+    void diagramRenderService.dispose();
+    diagramRenderService = undefined;
+  }
 }

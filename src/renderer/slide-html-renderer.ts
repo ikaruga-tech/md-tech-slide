@@ -12,6 +12,7 @@ import type {
   TextSpan,
   ColumnsSlot,
 } from '../types/ir.js';
+import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { resolveTheme, getDeckTypography } from '../theme/index.js';
 import { escapeHtml } from './html-escape.js';
@@ -32,6 +33,7 @@ export interface RenderHtmlOptions {
 interface RenderContext {
   readonly options?: RenderHtmlOptions;
   readonly dynamicStyles: Map<string, string>;
+  readonly styleHashes: Set<string>;
 }
 
 export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): string {
@@ -44,6 +46,7 @@ export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): 
   const context: RenderContext = {
     options,
     dynamicStyles: new Map(),
+    styleHashes: new Set(),
   };
 
   const slidesHtml = deck.slides
@@ -52,9 +55,12 @@ export function renderDeckToHtml(deck: SlideDeck, options?: RenderHtmlOptions): 
 
   const nonceAttr = options?.nonce ? ` nonce="${escapeHtml(options.nonce)}"` : '';
 
+  const styleHashesStr =
+    context.styleHashes.size > 0 ? ' ' + Array.from(context.styleHashes).join(' ') : '';
+
   const cspMeta =
     options?.cspSource && options?.nonce
-      ? `  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${options.cspSource} data:; style-src ${options.cspSource} 'nonce-${options.nonce}'; script-src ${options.cspSource} 'nonce-${options.nonce}';">\n`
+      ? `  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${options.cspSource} data:; style-src ${options.cspSource} 'nonce-${options.nonce}'${styleHashesStr}; script-src ${options.cspSource} 'nonce-${options.nonce}';">\n`
       : '';
 
   const dynamicCss = Array.from(context.dynamicStyles.values()).join('\n');
@@ -286,6 +292,27 @@ function renderBlockElementHtml(element: BlockElement, context: RenderContext): 
         )
         .join('')}</tbody>`;
       return `<table class="slide-table">${thead}${tbody}</table>`;
+    }
+
+    case 'diagram': {
+      const diag = element as import('../types/ir.js').DiagramBlock;
+      if (diag.status === 'success' && diag.svg) {
+        // Extract all <style> contents and compute SHA-256 base64 CSP hash
+        const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+        let match: RegExpExecArray | null;
+        while ((match = styleRegex.exec(diag.svg)) !== null) {
+          const styleContent = match[1]!;
+          const hash = crypto.createHash('sha256').update(styleContent, 'utf8').digest('base64');
+          context.styleHashes.add(`'sha256-${hash}'`);
+        }
+        return `<div class="slide-diagram">${diag.svg}</div>`;
+      }
+      if (diag.status === 'error') {
+        const code = diag.errorCode ? escapeHtml(diag.errorCode) : 'mermaid-render-failed';
+        const msg = diag.errorMessage ? escapeHtml(diag.errorMessage) : 'Failed to render diagram';
+        return `<div class="slide-diagram-error" data-error-code="${code}" role="alert"><span class="error-code">${code}</span>: <span class="error-message">${msg}</span></div>`;
+      }
+      return `<div class="slide-diagram-pending"><span>Rendering diagram...</span></div>`;
     }
   }
 }

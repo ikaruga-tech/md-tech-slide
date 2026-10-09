@@ -1,8 +1,7 @@
 import type { SlideDeck } from '../types/ir.js';
-import { savePresentationToFile } from '../generator/index.js';
-import type { RenderOptions } from '../generator/element-renderer.js';
+import { savePresentationToFile, type PptxExportOptions } from '../generator/index.js';
 
-export interface PptxExportOptions extends RenderOptions {}
+export type { PptxExportOptions };
 
 export async function exportDeckToPptx(
   deck: SlideDeck,

@@ -16,6 +16,7 @@ import type { Rect } from '../layout/types.js';
 import { calculatePptxSizes } from '../theme/typography.js';
 import { highlightCodeToTextProps } from './syntax-highlighter.js';
 import { resolveLocalResource } from '../resource/index.js';
+import { calculateSvgContain } from '../layout/contain-layout.js';
 
 export interface RenderOptions {
   readonly baseDir?: string;
@@ -324,6 +325,49 @@ export async function renderSlotElements(
         });
 
         currentY += tableH + elementMargin;
+        break;
+      }
+
+      case 'diagram': {
+        const diagramBlock = el as import('../types/ir.js').DiagramBlock;
+        if (diagramBlock.status === 'success' && diagramBlock.svg) {
+          const base64Svg = Buffer.from(diagramBlock.svg, 'utf8').toString('base64');
+          const dataUri = `data:image/svg+xml;base64,${base64Svg}`;
+
+          const targetBoxH = Math.max(1.0, availableH);
+          const viewBox = diagramBlock.viewBox ?? { minX: 0, minY: 0, width: 800, height: 600 };
+          const placement = calculateSvgContain(viewBox, {
+            x: rect.x,
+            y: currentY,
+            width: rect.w,
+            height: targetBoxH,
+          });
+
+          slide.addImage({
+            data: dataUri,
+            x: placement.x,
+            y: placement.y,
+            w: placement.width,
+            h: placement.height,
+          });
+
+          currentY += targetBoxH + elementMargin;
+        } else if (diagramBlock.status === 'error') {
+          const code = diagramBlock.errorCode ?? 'mermaid-render-failed';
+          const msg = diagramBlock.errorMessage ?? 'Failed to render diagram';
+          const errorH = 0.8;
+          slide.addText(`[Diagram Error] ${code}: ${msg}`, {
+            x: rect.x,
+            y: currentY,
+            w: rect.w,
+            h: errorH,
+            color: 'EF4444',
+            fontSize: 10,
+            fontFace: codeFont,
+            fill: { color: 'FEE2E2' },
+          });
+          currentY += errorH + elementMargin;
+        }
         break;
       }
     }

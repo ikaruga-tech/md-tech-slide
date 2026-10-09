@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { validateSlideSyntax } from '../src/validator/index.js';
+import { assertResolvedDeck, type SlideDeck } from '../src/types/ir.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -177,5 +178,238 @@ And real valid image with title:
         fs.rmdirSync(tempDir);
       }
     }
+  });
+});
+
+describe('assertResolvedDeck runtime validation', () => {
+  it('passes for a fully resolved deck with success and error diagram blocks', () => {
+    const deck: import('../src/types/ir.js').SlideDeck = {
+      metadata: {},
+      slides: [
+        {
+          index: 0,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'single',
+              elements: [
+                {
+                  type: 'diagram',
+                  kind: 'mermaid',
+                  source: 'flowchart TD\nA-->B',
+                  startLine: 2,
+                  configId: 'cfg',
+                  hash: 'hash1',
+                  status: 'success',
+                  svg: '<svg viewBox="0 0 100 100"><rect/></svg>',
+                  viewBox: { minX: 0, minY: 0, width: 100, height: 100 },
+                },
+              ],
+            },
+          },
+        },
+        {
+          index: 1,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'columns',
+              columns: [
+                {
+                  id: 'col-1',
+                  elements: [
+                    {
+                      type: 'diagram',
+                      kind: 'mermaid',
+                      source: 'invalid syntax',
+                      startLine: 10,
+                      configId: 'cfg',
+                      hash: 'hash2',
+                      status: 'error',
+                      errorCode: 'mermaid-invalid-syntax',
+                      errorMessage: 'Syntax error on line 10',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(() => {
+      assertResolvedDeck(deck);
+    }).not.toThrow();
+  });
+
+  it('throws when single slot contains an unresolved pending diagram', () => {
+    const deck: SlideDeck = {
+      metadata: {},
+      slides: [
+        {
+          index: 0,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'single',
+              elements: [
+                {
+                  type: 'diagram',
+                  kind: 'mermaid',
+                  source: 'flowchart TD\nA-->B',
+                  startLine: 2,
+                  configId: 'cfg',
+                  hash: 'hash1',
+                  status: 'pending',
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(() => assertResolvedDeck(deck)).toThrowError(
+      /Slide 1, element 1 contains an unresolved pending diagram/
+    );
+  });
+
+  it('throws when column slot contains an unresolved pending diagram', () => {
+    const deck: SlideDeck = {
+      metadata: {},
+      slides: [
+        {
+          index: 0,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'columns',
+              columns: [
+                {
+                  id: 'col-1',
+                  elements: [
+                    {
+                      type: 'diagram',
+                      kind: 'mermaid',
+                      source: 'flowchart TD\nA-->B',
+                      startLine: 2,
+                      configId: 'cfg',
+                      hash: 'hash1',
+                      status: 'pending',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(() => assertResolvedDeck(deck)).toThrowError(
+      /Slide 1, column 1, element 1 contains an unresolved pending diagram/
+    );
+  });
+
+  it('throws when diagram has success status but missing or empty svg', () => {
+    const deck: SlideDeck = {
+      metadata: {},
+      slides: [
+        {
+          index: 0,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'single',
+              elements: [
+                {
+                  type: 'diagram',
+                  kind: 'mermaid',
+                  source: 'flowchart TD\nA-->B',
+                  startLine: 2,
+                  configId: 'cfg',
+                  hash: 'hash1',
+                  status: 'success',
+                  svg: '',
+                  viewBox: { minX: 0, minY: 0, width: 100, height: 100 },
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(() => assertResolvedDeck(deck)).toThrowError(/missing valid non-empty svg/);
+  });
+
+  it('throws when diagram has success status but non-positive or NaN viewBox', () => {
+    const deck: SlideDeck = {
+      metadata: {},
+      slides: [
+        {
+          index: 0,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'columns',
+              columns: [
+                {
+                  id: 'col-1',
+                  elements: [
+                    {
+                      type: 'diagram',
+                      kind: 'mermaid',
+                      source: 'flowchart TD\nA-->B',
+                      startLine: 2,
+                      configId: 'cfg',
+                      hash: 'hash1',
+                      status: 'success',
+                      svg: '<svg/>',
+                      viewBox: { minX: 0, minY: 0, width: -10, height: 100 },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(() => assertResolvedDeck(deck)).toThrowError(/invalid non-positive viewBox/);
+  });
+
+  it('throws when diagram has error status but missing errorCode', () => {
+    const deck: SlideDeck = {
+      metadata: {},
+      slides: [
+        {
+          index: 0,
+          type: 'content',
+          slots: {
+            body: {
+              type: 'single',
+              elements: [
+                {
+                  type: 'diagram',
+                  kind: 'mermaid',
+                  source: 'bad',
+                  startLine: 2,
+                  configId: 'cfg',
+                  hash: 'hash1',
+                  status: 'error',
+                  errorCode: '' as unknown as import('../src/types/ir.js').DiagramErrorCode,
+                  errorMessage: 'err',
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    expect(() => assertResolvedDeck(deck)).toThrowError(/missing non-empty errorCode/);
   });
 });

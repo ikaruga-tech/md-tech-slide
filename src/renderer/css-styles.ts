@@ -328,5 +328,35 @@ table.slide-table th {
   white-space: pre-wrap;
   line-height: 1.4;
 }
+
+.slide-diagram {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.slide-diagram svg {
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+}
+
+.slide-diagram-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin: 8px 0;
+  font-family: var(--font-code);
+}
+
+.slide-diagram-error .error-code {
+  font-weight: 600;
+}
 `.trim();
 }

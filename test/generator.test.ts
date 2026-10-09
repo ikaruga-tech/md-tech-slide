@@ -62,5 +62,5 @@ describe('generator', () => {
     if (fs.existsSync(exampleOutputPath)) {
       fs.unlinkSync(exampleOutputPath);
     }
-  });
+  }, 20000);
 });

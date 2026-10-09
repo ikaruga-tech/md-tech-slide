@@ -123,4 +123,56 @@ Testing 720x540 point dimensions.
       }
     }
   });
+
+  it('exports PDF containing Mermaid diagrams as vector SVG elements', async () => {
+    if (!browserPath) {
+      throw new Error('Real browser must be available for PDF E2E verification.');
+    }
+
+    const markdown = `---
+title: "PDF Mermaid E2E Test"
+aspectRatio: "16:9"
+---
+
+# Slide 1
+
+Introduction to architecture.
+
+########
+
+## System Architecture
+
+\`\`\`mermaid
+graph TD
+    Client[Web Client] --> Gateway[API Gateway]
+    Gateway --> Microservice[Auth Service]
+\`\`\`
+`;
+
+    const deck = parseMarkdownToSlideDeck(markdown);
+    const tempDir = path.resolve(__dirname, '../out/test-e2e');
+    fs.mkdirSync(tempDir, { recursive: true });
+    const outputPath = path.join(tempDir, 'e2e-mermaid.pdf');
+
+    try {
+      await exportDeckToPdf(deck, outputPath, { browserPath });
+      expect(fs.existsSync(outputPath)).toBe(true);
+
+      const buffer = fs.readFileSync(outputPath);
+      const validation = await validatePdfBuffer(buffer);
+
+      expect(validation.pageCount).toBe(2);
+      expect(validation.text).toContain('System Architecture');
+      expect(validation.text).toContain('Web Client');
+      expect(validation.text).toContain('API Gateway');
+    } finally {
+      if (fs.existsSync(outputPath)) {
+        try {
+          fs.unlinkSync(outputPath);
+        } catch {
+          // ignore cleanup
+        }
+      }
+    }
+  });
 });

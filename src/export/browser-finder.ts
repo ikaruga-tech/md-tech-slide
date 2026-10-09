@@ -2,17 +2,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-function getCandidatePaths(): readonly string[] {
+function getOsCandidatePaths(): readonly string[] {
   const platform = process.platform;
   const home = os.homedir();
-
-  // 環境変数が指定されている場合は最優先
-  const envPath = process.env['PUPPETEER_EXECUTABLE_PATH'] || process.env['CHROME_PATH'];
   const candidates: string[] = [];
-
-  if (envPath && envPath.trim().length > 0) {
-    candidates.push(envPath.trim());
-  }
 
   if (platform === 'darwin') {
     candidates.push(
@@ -51,19 +44,104 @@ function getCandidatePaths(): readonly string[] {
   return candidates;
 }
 
-export function findInstalledBrowser(): string | null {
-  const candidates = getCandidatePaths();
+export function isExecutableFile(targetPath: string): boolean {
+  try {
+    const stat = fs.statSync(targetPath);
+    if (!stat.isFile()) {
+      return false;
+    }
 
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    } catch {
-      // アクセス権限等の例外は無視して次を探索
-      continue;
+    if (process.platform === 'win32') {
+      const ext = path.extname(targetPath).toLowerCase();
+      return ext === '.exe' || ext === '.cmd' || ext === '.bat';
+    }
+
+    // POSIX
+    fs.accessSync(targetPath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function findInstalledBrowser(): string | null {
+  const envCandidates = [
+    process.env['MD_TECH_SLIDE_BROWSER_PATH'],
+    process.env['PUPPETEER_EXECUTABLE_PATH'],
+    process.env['CHROME_PATH'],
+  ].filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+
+  for (const envPath of envCandidates) {
+    const trimmed = envPath.trim();
+    if (isExecutableFile(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  const osCandidates = getOsCandidatePaths();
+  for (const candidate of osCandidates) {
+    if (isExecutableFile(candidate)) {
+      return candidate;
     }
   }
 
   return null;
+}
+
+export type BrowserResolutionResult =
+  | { readonly executablePath: string }
+  | {
+      readonly error: 'mermaid-invalid-browser-path' | 'mermaid-browser-not-found';
+      readonly message: string;
+    };
+
+/**
+ * Resolves browser executable according to priority:
+ * 1. MD_TECH_SLIDE_BROWSER_PATH
+ * 2. PUPPETEER_EXECUTABLE_PATH
+ * 3. CHROME_PATH
+ * 4. configPath (mdTechSlide.browserPath)
+ * 5. fallbackConfigPath (mdTechSlide.export.browserPath)
+ * 6. findInstalledBrowser()
+ */
+export function resolveBrowserExecutable(
+  configPath?: string,
+  fallbackConfigPath?: string
+): BrowserResolutionResult {
+  const envPath =
+    process.env['MD_TECH_SLIDE_BROWSER_PATH'] ||
+    process.env['PUPPETEER_EXECUTABLE_PATH'] ||
+    process.env['CHROME_PATH'];
+
+  const explicitlySpecifiedPath =
+    (envPath && envPath.trim()) ||
+    (configPath && configPath.trim()) ||
+    (fallbackConfigPath && fallbackConfigPath.trim());
+
+  if (explicitlySpecifiedPath) {
+    if (!fs.existsSync(explicitlySpecifiedPath)) {
+      return {
+        error: 'mermaid-invalid-browser-path',
+        message: `Configured browser path does not exist: "${explicitlySpecifiedPath}"`,
+      };
+    }
+    if (!isExecutableFile(explicitlySpecifiedPath)) {
+      return {
+        error: 'mermaid-invalid-browser-path',
+        message: `Configured browser path is not an executable file: "${explicitlySpecifiedPath}"`,
+      };
+    }
+    return { executablePath: explicitlySpecifiedPath };
+  }
+
+  const detected = findInstalledBrowser();
+  if (!detected) {
+    return {
+      error: 'mermaid-browser-not-found',
+      message:
+        'No compatible Chromium-based browser (Chrome / Edge) found on system. Please set mdTechSlide.browserPath or install Chrome.',
+    };
+  }
+
+  return { executablePath: detected };
 }
