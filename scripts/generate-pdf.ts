@@ -9,8 +9,12 @@ const __dirname = path.dirname(__filename);
 
 async function main(): Promise<void> {
   const rootDir = path.resolve(__dirname, '..');
-  const inputPath = path.join(rootDir, 'test', 'fixtures', 'sample.md');
-  const outputPath = path.join(rootDir, 'output', 'sample.pdf');
+  const inputPath = process.argv[2]
+    ? path.resolve(process.argv[2])
+    : path.join(rootDir, 'test', 'fixtures', 'sample.md');
+  const outputPath = process.argv[3]
+    ? path.resolve(process.argv[3])
+    : path.join(rootDir, 'output', 'sample.pdf');
 
   console.log(`Reading Markdown from: ${inputPath}`);
   const source = fs.readFileSync(inputPath, 'utf-8');
