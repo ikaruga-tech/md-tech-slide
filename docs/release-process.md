@@ -39,6 +39,7 @@ The release pipeline is defined in `.github/workflows/release.yml`.
 - Verifies:
   1. Release tag regex and `package.json` version match (`scripts/verify-release-tag.js`).
   2. Prior successful 4-job CI execution on the target commit SHA (`scripts/verify-ci-status.js`).
+     - Note on partial re-runs: `verify-ci-status.js` strictly requires all 4 required CI jobs to be present and successful within the latest run attempt of the workflow run. If a job fails and partial re-run ("Re-run failed jobs") is performed in GitHub Actions, maintainers must ensure that all 4 jobs are successful in that latest attempt, or trigger a full re-run ("Re-run all jobs") before running release verification. Mixing successful jobs from previous attempts is not permitted.
   3. Clean execution of the complete local test suite (`npm run verify`).
   4. Generation of sample presentations (`sample.pptx`, `sample.pdf`).
   5. SHA-256 calculation for binary artifacts and generation of `release-manifest.json` (`scripts/generate-release-manifest.js`).
