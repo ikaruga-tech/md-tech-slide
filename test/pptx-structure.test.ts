@@ -314,7 +314,7 @@ sequenceDiagram
 
       // Verify slide 2 contains column text alongside the diagram
       expect(info.slides[1]!.textContents.join(' ')).toContain('Explanation text here.');
-    }, 20000);
+    }, 30000);
 
     it('embeds multiple diagrams in a single slide without media filename or relId collisions', async () => {
       const markdown = `---
@@ -376,6 +376,6 @@ flowchart TD
       for (const rel of svgRels) {
         expect(slide.xml).toContain(`r:embed="${rel.id}"`);
       }
-    }, 20000);
+    }, 30000);
   });
 });

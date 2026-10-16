@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-verify:
+    name: Build & Verify Release Artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Verify Node.js version (>=22.12.0)
+        run: |
+          node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major < 22 || (major === 22 && minor < 12)) { console.error('Node.js >= 22.12.0 required, got ' + process.version); process.exit(1); } console.log('Node.js version verified: ' + process.version);"
+
+      - name: Install system dependencies (Xvfb & Chromium libraries)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Cache Chrome for Testing
+        id: cache-chrome
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/chrome
+          key: chrome-${{ runner.os }}-128.0.6613.119
+
+      - name: Install Chrome for Testing
+        if: steps.cache-chrome.outputs.cache-hit != 'true'
+        run: npx --no-install @puppeteer/browsers install chrome@128.0.6613.119 --path ${{ github.workspace }}/.cache/chrome
+
+      - name: Resolve Chrome executable path and verify
+        run: |
+          CHROME_PATH=$(node scripts/resolve-chrome.js)
+          if [ ! -x "$CHROME_PATH" ]; then
+            echo "Error: Resolved Chrome executable not found or not executable"
+            exit 1
+          fi
+          echo "Chrome executable resolved and verified successfully."
+          echo "PUPPETEER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
+
+      - name: Verify Release Tag and package.json version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: node scripts/verify-release-tag.js
+
+      - name: Verify CI 4-job status on target commit
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/verify-ci-status.js
+
+      - name: Run verification gate
+        run: npm run verify
+        env:
+          CI: true
+
+      - name: Generate sample presentations (PPTX & PDF)
+        run: |
+          npm run generate:sample
+          npm run generate:pdf
+
+      - name: Generate checksums and release manifest
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: node scripts/generate-release-manifest.js
+
+      - name: Upload verified release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            generated/*.vsix
+            output/sample.pptx
+            output/sample.pdf
+            output/checksums.txt
+            output/release-manifest.json
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository at target commit SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read package name and version from checked out package.json
+        run: |
+          node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8')); if (!pkg.name || !pkg.version) throw new Error('name or version missing in package.json'); fs.appendFileSync(process.env.GITHUB_ENV, 'PACKAGE_NAME=' + pkg.name + '\nPACKAGE_VERSION=' + pkg.version + '\n');"
+
+      - name: Verify Release Tag against package.json version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: node scripts/verify-release-tag.js
+
+      - name: Check release absence via HTTP status (fail on existing or error)
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-release-absence.js
+
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: release-dist
+
+      - name: Verify downloaded artifacts against manifest and checksums
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+          PACKAGE_VERSION: ${{ env.PACKAGE_VERSION }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: node scripts/verify-downloaded-artifacts.js release-dist
+
+      - name: Determine pre-release status from tag
+        id: tag_info
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$TAG_NAME" =~ -rc\.[0-9]+$ ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG_NAME identified as Release Candidate (pre-release)."
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "Tag $TAG_NAME identified as Stable Release."
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            release-dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ steps.tag_info.outputs.is_prerelease == 'true' }}

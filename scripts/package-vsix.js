@@ -8,7 +8,12 @@ import JSZip from 'jszip';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDir, '..');
 const outputDir = path.resolve(projectRoot, 'generated');
-const outputFile = path.join(outputDir, 'md-tech-slide-0.1.0.vsix');
+const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf-8'));
+if (!packageJson.name || !packageJson.version) {
+  throw new Error('name and version are required in package.json for packaging');
+}
+const packageName = packageJson.name;
+const outputFile = path.join(outputDir, `${packageName}-${packageJson.version}.vsix`);
 
 fs.mkdirSync(outputDir, { recursive: true });
 
