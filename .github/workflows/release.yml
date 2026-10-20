@@ -92,16 +92,28 @@ jobs:
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: node scripts/generate-release-manifest.js
 
+      - name: Read package name and version from package.json
+        run: |
+          node -e "const fs = require('node:fs'); const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8')); if (!pkg.name || !pkg.version) throw new Error('name or version missing in package.json'); fs.appendFileSync(process.env.GITHUB_ENV, 'PACKAGE_NAME=' + pkg.name + '\nPACKAGE_VERSION=' + pkg.version + '\n');"
+
+      - name: Stage release artifacts into flat staging directory
+        run: node scripts/stage-release-artifacts.js release-artifacts-staging
+
+      - name: Verify staged release artifacts prior to upload
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          PACKAGE_NAME: ${{ env.PACKAGE_NAME }}
+          PACKAGE_VERSION: ${{ env.PACKAGE_VERSION }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: node scripts/verify-downloaded-artifacts.js release-artifacts-staging
+
       - name: Upload verified release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts
-          path: |
-            generated/*.vsix
-            output/sample.pptx
-            output/sample.pdf
-            output/checksums.txt
-            output/release-manifest.json
+          path: release-artifacts-staging/
           retention-days: 1
 
   publish-release:
