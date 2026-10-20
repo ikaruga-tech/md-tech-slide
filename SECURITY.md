@@ -15,9 +15,13 @@ We take the security of md-tech-slide seriously. If you believe you have found a
 
 ### Reporting Channel
 
-> [!NOTE]
-> Specific private security email contact is to be confirmed by the repository owner before public release.
-> Until a dedicated private reporting email is established, please use GitHub's private vulnerability reporting feature on this repository if available, or open a confidential discussion. Do NOT create public issues for sensitive security vulnerabilities.
+Please report potential security vulnerabilities privately through GitHub Private Vulnerability Reporting:
+
+1. Navigate to the Security tab of this repository: <https://github.com/ikaruga-tech/md-tech-slide/security>
+2. Click on "Report a vulnerability" to open an advisory draft.
+3. Fill in the details outlined below and submit the report.
+
+Do NOT open public issues, discussions, or pull requests for security vulnerabilities.
 
 ### What to Include in Your Report
 
