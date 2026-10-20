@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import YAML from 'yaml';
 import { parseAndVerifyTag } from '../scripts/verify-release-tag.js';
 import { verifyWorkflowJobs, REQUIRED_CI_JOB_NAMES } from '../scripts/verify-ci-status.js';
 import { evaluateReleaseAbsenceStatus } from '../scripts/check-release-absence.js';
@@ -1582,5 +1583,55 @@ describe('Release Workflow Packaging and Name Alignment (.github/workflows/relea
     expect(content).toContain('PACKAGE_NAME: ${{ env.PACKAGE_NAME }}');
     expect(content).toContain('PACKAGE_VERSION: ${{ env.PACKAGE_VERSION }}');
     expect(content).toContain('node scripts/verify-downloaded-artifacts.js');
+  });
+
+  it('strictly verifies release verification runs under Xvfb with prior dependency setup and publish job dependency', () => {
+    const workflowPath = path.resolve(__dirname, '../.github/workflows/release.yml');
+    expect(fs.existsSync(workflowPath)).toBe(true);
+
+    const rawYaml = fs.readFileSync(workflowPath, 'utf-8');
+    const doc = YAML.parse(rawYaml);
+
+    expect(doc).toBeDefined();
+    expect(doc.jobs).toBeDefined();
+
+    // 1. Verify build-and-verify job exists
+    const buildJob = doc.jobs['build-and-verify'];
+    expect(buildJob).toBeDefined();
+    expect(buildJob.steps).toBeInstanceOf(Array);
+
+    // 2. Find verification gate step and system dependency step
+    const steps = buildJob.steps as Array<{ name?: string; run?: string }>;
+    const verifyStepIndex = steps.findIndex((s) => s.run && s.run.includes('npm run verify'));
+    expect(verifyStepIndex).toBeGreaterThan(-1);
+
+    const verifyStep = steps[verifyStepIndex];
+    expect(verifyStep.run?.trim()).toBe('xvfb-run -a npm run verify');
+
+    // 3. Ensure Xvfb installation happens BEFORE verification gate step
+    const xvfbInstallStepIndex = steps.findIndex(
+      (s) => s.run && s.run.includes('apt-get install') && s.run.includes('xvfb')
+    );
+    expect(xvfbInstallStepIndex).toBeGreaterThan(-1);
+    expect(xvfbInstallStepIndex).toBeLessThan(verifyStepIndex);
+
+    // 4. Ensure publish-release job strictly depends on build-and-verify success
+    const publishJob = doc.jobs['publish-release'];
+    expect(publishJob).toBeDefined();
+
+    // Must declare needs: build-and-verify (either string or array containing it)
+    if (Array.isArray(publishJob.needs)) {
+      expect(publishJob.needs).toContain('build-and-verify');
+    } else {
+      expect(publishJob.needs).toBe('build-and-verify');
+    }
+
+    // Must NOT have always(), failure(), or cancelled() that would trigger publishing on verification failure
+    if (publishJob.if) {
+      const conditionStr = String(publishJob.if);
+      expect(conditionStr).not.toMatch(/always\s*\(/);
+      expect(conditionStr).not.toMatch(/failure\s*\(/);
+      expect(conditionStr).not.toMatch(/cancelled\s*\(/);
+    }
   });
 });

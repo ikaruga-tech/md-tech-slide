@@ -74,7 +74,7 @@ jobs:
         run: node scripts/verify-ci-status.js
 
       - name: Run verification gate
-        run: npm run verify
+        run: xvfb-run -a npm run verify
         env:
           CI: true
 
