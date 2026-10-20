@@ -40,7 +40,7 @@ The release pipeline is defined in `.github/workflows/release.yml`.
   1. Release tag regex and `package.json` version match (`scripts/verify-release-tag.js`).
   2. Prior successful 4-job CI execution on the target commit SHA (`scripts/verify-ci-status.js`).
      - Note on partial re-runs: `verify-ci-status.js` strictly requires all 4 required CI jobs to be present and successful within the latest run attempt of the workflow run. If a job fails and partial re-run ("Re-run failed jobs") is performed in GitHub Actions, maintainers must ensure that all 4 jobs are successful in that latest attempt, or trigger a full re-run ("Re-run all jobs") before running release verification. Mixing successful jobs from previous attempts is not permitted.
-  3. Clean execution of the complete local test suite (`npm run verify`).
+  3. Clean execution of the complete local test suite (`npm run verify`). In headless Linux environments (including GitHub Actions ubuntu runners), verification must run under a virtual framebuffer (`xvfb-run -a npm run verify`) to support VS Code Extension Host smoke testing without display server failures.
   4. Generation of sample presentations (`sample.pptx`, `sample.pdf`).
   5. SHA-256 calculation for binary artifacts and generation of `release-manifest.json` (`scripts/generate-release-manifest.js`).
 - Uploads verified artifacts to a temporary GitHub Actions artifact store.
@@ -73,11 +73,16 @@ After release publication:
 
 ## 4. Rollback and Incident Handling
 
-If a critical flaw (P0) is discovered after publishing:
+If a release verification failure occurs, or a critical flaw (P0) is discovered after publishing:
 
 1. Release Candidate:
-   - Do NOT modify or overwrite the existing tag or release assets.
-   - Fix the issue on a new branch, merge to `main`, and issue the next RC tag (e.g., `v0.1.0-rc.2`).
+   - Verification / Publishing Failures:
+     - If release verification fails before publication (e.g., in `v0.1.0-rc.1`), the failed tag is retained as an immutable Git audit record. Do NOT delete, move, or force-push over the tag.
+     - The issue must be investigated and resolved on a dedicated fix branch, followed by standard PR, CI, and merge to `main`.
+     - After merging fixes to `main`, advance to the next RC tag (e.g., `v0.1.0-rc.2`). Never re-use or re-issue a previously failed tag.
+   - Post-Publication Defects:
+     - Do NOT modify or overwrite the existing tag or release assets.
+     - Fix the issue on a new branch, merge to `main`, and issue the next RC tag (e.g., `v0.1.0-rc.2`).
 2. Stable Release:
    - Edit the GitHub Release notes to add a prominent warning banner marking the release as revoked.
    - Prepare a hotfix release (e.g., `v0.1.1`) immediately.
