@@ -30,9 +30,7 @@ Community leaders are responsible for clarifying and enforcing our standards of 
 
 ## Enforcement Guidelines
 
-> [!NOTE]
-> Community contact and enforcement email is to be confirmed by the repository owner before public release.
-> In the interim, please contact the repository maintainers via GitHub Issues or confidential channels for moderation and enforcement requests.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leadership at `kapitan.ys+ikaruga@gmail.com`. All complaints will be reviewed and investigated promptly and fairly.
 
 ### Scope
 
