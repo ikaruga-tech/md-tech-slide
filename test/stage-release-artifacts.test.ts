@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import YAML from 'yaml';
-import { stageReleaseArtifacts } from '../scripts/stage-release-artifacts.js';
+import { stageReleaseArtifacts, STAGE_ERROR_CODES } from '../scripts/stage-release-artifacts.js';
 
 function calculateSha256(filePath: string): string {
   const fileBuffer = fs.readFileSync(filePath);
@@ -41,6 +41,7 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -118,10 +119,14 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
       runAttempt,
       tag,
       commitSha,
+      vsixSha,
+      pptxSha,
+      pdfSha,
+      checksumsSha,
     };
   }
 
-  it('stages 5 artifacts into a flat directory and passes verification CLI', () => {
+  it('stages 5 artifacts into a flat directory and preserves byte-level integrity', () => {
     const meta = setupValidArtifacts();
 
     const stageResult = stageReleaseArtifacts({
@@ -141,13 +146,19 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
       ['checksums.txt', vsixName, 'release-manifest.json', 'sample.pdf', 'sample.pptx'].sort()
     );
 
-    // No subdirectories
+    // Verify byte-level integrity and no subdirectories or symlinks
     for (const entry of stagedEntries) {
-      const entryStat = fs.lstatSync(path.join(stagingDir, entry));
+      const entryPath = path.join(stagingDir, entry);
+      const entryStat = fs.lstatSync(entryPath);
       expect(entryStat.isFile()).toBe(true);
       expect(entryStat.isDirectory()).toBe(false);
       expect(entryStat.isSymbolicLink()).toBe(false);
     }
+
+    expect(calculateSha256(path.join(stagingDir, vsixName))).toBe(meta.vsixSha);
+    expect(calculateSha256(path.join(stagingDir, 'sample.pptx'))).toBe(meta.pptxSha);
+    expect(calculateSha256(path.join(stagingDir, 'sample.pdf'))).toBe(meta.pdfSha);
+    expect(calculateSha256(path.join(stagingDir, 'checksums.txt'))).toBe(meta.checksumsSha);
 
     // Run existing verification CLI against the staged directory via child_process
     const verifyScript = path.resolve(__dirname, '../scripts/verify-downloaded-artifacts.js');
@@ -176,7 +187,7 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
     );
   });
 
-  it('fails safely when a required artifact is missing', () => {
+  it('fails safely without leaking path when a required artifact is missing', () => {
     setupValidArtifacts();
     // Remove sample.pdf
     fs.unlinkSync(path.join(outputDir, 'sample.pdf'));
@@ -190,7 +201,9 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
     });
 
     expect(stageResult.isSuccess).toBe(false);
-    expect(stageResult.error).toContain('Required artifact not found');
+    expect(stageResult.code).toBe(STAGE_ERROR_CODES.ERR_SOURCE_ARTIFACT_NOT_FOUND);
+    expect(stageResult.error).toBe('Required source artifact not found: sample PDF.');
+    expect(stageResult.error).not.toContain(outputDir);
   });
 
   it('fails safely when an artifact is a directory or symbolic link', () => {
@@ -208,7 +221,9 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
     });
 
     expect(stageResult.isSuccess).toBe(false);
-    expect(stageResult.error).toContain('not a regular file');
+    expect(stageResult.code).toBe(STAGE_ERROR_CODES.ERR_SOURCE_ARTIFACT_NOT_REGULAR_FILE);
+    expect(stageResult.error).toBe('Source artifact is not a regular file: sample PPTX.');
+    expect(stageResult.error).not.toContain(outputDir);
   });
 
   it('fails safely when the staging target directory is already non-empty', () => {
@@ -225,10 +240,13 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
     });
 
     expect(stageResult.isSuccess).toBe(false);
-    expect(stageResult.error).toContain('must be empty');
+    expect(stageResult.code).toBe(STAGE_ERROR_CODES.ERR_STAGING_DIR_NOT_EMPTY);
+    expect(stageResult.error).toBe('Staging target directory must be empty.');
+    expect(stageResult.error).not.toContain(stagingDir);
+    expect(stageResult.error).not.toContain('unexpected.txt');
   });
 
-  it('fails safely when package.json is missing or invalid', () => {
+  it('fails safely when package.json is missing', () => {
     setupValidArtifacts();
     fs.unlinkSync(pkgPath);
 
@@ -241,7 +259,173 @@ describe('Stage Release Artifacts (scripts/stage-release-artifacts.js)', () => {
     });
 
     expect(stageResult.isSuccess).toBe(false);
-    expect(stageResult.error).toContain('package.json not found');
+    expect(stageResult.code).toBe(STAGE_ERROR_CODES.ERR_PACKAGE_JSON_READ_FAILED);
+    expect(stageResult.error).toBe('Failed to read package.json (ENOENT).');
+    expect(stageResult.error).not.toContain(pkgPath);
+  });
+
+  it('does not leak sentinel tokens, stack traces, or absolute paths when package.json parsing fails in CLI', () => {
+    setupValidArtifacts();
+    const sentinelToken = 'SENTINEL_TOP_SECRET_CREDENTIAL_98765';
+    fs.writeFileSync(
+      pkgPath,
+      `{\n  "name": "md-tech-slide",\n  "leak": "${sentinelToken}",\n  INVALID_JSON_BODY\n}`,
+      'utf-8'
+    );
+
+    const cliScript = path.resolve(__dirname, '../scripts/stage-release-artifacts.js');
+    const res = spawnSync(process.execPath, [cliScript, stagingDir, tempDir], {
+      encoding: 'utf-8',
+    });
+
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain(
+      '[ERR_PACKAGE_JSON_PARSE_FAILED] Failed to parse package.json as valid JSON.'
+    );
+    expect(res.stderr).not.toContain(sentinelToken);
+    expect(res.stdout).not.toContain(sentinelToken);
+    expect(res.stderr).not.toContain(tempDir);
+    expect(res.stdout).not.toContain(tempDir);
+    expect(res.stderr).not.toContain('SyntaxError');
+  });
+
+  it('rejects path traversal in package.json name before creating staging directory', () => {
+    setupValidArtifacts();
+    const traversalNames = ['../../malicious', 'pkg/sub', 'pkg\\back', '', '   ', 'UPPERCASE'];
+
+    for (const badName of traversalNames) {
+      fs.writeFileSync(
+        pkgPath,
+        JSON.stringify({ name: badName, version: '0.1.0' }, null, 2),
+        'utf-8'
+      );
+
+      const targetStaging = path.join(
+        tempDir,
+        `staging-for-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+
+      const stageResult = stageReleaseArtifacts({
+        rootDir: tempDir,
+        stagingDir: targetStaging,
+        generatedDir,
+        outputDir,
+        pkgPath,
+      });
+
+      expect(stageResult.isSuccess).toBe(false);
+      expect(stageResult.code).toBe(STAGE_ERROR_CODES.ERR_PACKAGE_NAME_INVALID);
+      expect(stageResult.error).toBe('Invalid package name format.');
+      if (badName.trim().length > 0) {
+        expect(stageResult.error).not.toContain(badName);
+      }
+      // Ensure staging dir was NOT created
+      expect(fs.existsSync(targetStaging)).toBe(false);
+    }
+  });
+
+  it('rejects invalid or leading-zero version before creating staging directory', () => {
+    setupValidArtifacts();
+    const badVersions = ['01.0.0', '1.0', '1.0.0-rc.1', '1.0.0.0', 'v1.0.0', '', '1.0.01'];
+
+    for (const badVersion of badVersions) {
+      fs.writeFileSync(
+        pkgPath,
+        JSON.stringify({ name: 'md-tech-slide', version: badVersion }, null, 2),
+        'utf-8'
+      );
+
+      const targetStaging = path.join(
+        tempDir,
+        `staging-for-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+
+      const stageResult = stageReleaseArtifacts({
+        rootDir: tempDir,
+        stagingDir: targetStaging,
+        generatedDir,
+        outputDir,
+        pkgPath,
+      });
+
+      expect(stageResult.isSuccess).toBe(false);
+      expect(stageResult.code).toBe(STAGE_ERROR_CODES.ERR_PACKAGE_VERSION_INVALID);
+      expect(stageResult.error).toBe('Invalid package version format.');
+      if (badVersion.trim().length > 0) {
+        expect(stageResult.error).not.toContain(badVersion);
+      }
+      // Ensure staging dir was NOT created
+      expect(fs.existsSync(targetStaging)).toBe(false);
+    }
+  });
+
+  it('sanitizes filesystem errors to allowed codes or generic code without raw error leak', () => {
+    setupValidArtifacts();
+
+    // 1. Mock mkdirSync with allowed code
+    const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementationOnce(() => {
+      const err = new Error('Raw sensitive host filesystem message') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    });
+
+    const result1 = stageReleaseArtifacts({
+      rootDir: tempDir,
+      stagingDir,
+      generatedDir,
+      outputDir,
+      pkgPath,
+    });
+
+    expect(result1.isSuccess).toBe(false);
+    expect(result1.code).toBe(STAGE_ERROR_CODES.ERR_STAGING_DIR_CREATE_FAILED);
+    expect(result1.error).toBe('Failed to create staging directory (EACCES).');
+    expect(result1.error).not.toContain('Raw sensitive host filesystem message');
+    expect(result1.error).not.toContain(stagingDir);
+    mkdirSpy.mockRestore();
+
+    // 2. Mock copyFileSync with unknown code (normalized to ERR_FS_OPERATION_FAILED)
+    const copySpy = vi.spyOn(fs, 'copyFileSync').mockImplementationOnce(() => {
+      const err = new Error('Sensitive kernel disk error') as NodeJS.ErrnoException;
+      err.code = 'ECUSTOM_UNRECOGNIZED_CODE';
+      throw err;
+    });
+
+    const result2 = stageReleaseArtifacts({
+      rootDir: tempDir,
+      stagingDir,
+      generatedDir,
+      outputDir,
+      pkgPath,
+    });
+
+    expect(result2.isSuccess).toBe(false);
+    expect(result2.code).toBe(STAGE_ERROR_CODES.ERR_ARTIFACT_COPY_FAILED);
+    expect(result2.error).toBe(
+      'Failed during artifact copy: VSIX artifact (ERR_FS_OPERATION_FAILED).'
+    );
+    expect(result2.error).not.toContain('Sensitive kernel disk error');
+    expect(result2.error).not.toContain('ECUSTOM_UNRECOGNIZED_CODE');
+    copySpy.mockRestore();
+  });
+
+  it('CLI success output outputs clean summary without leaking absolute stagingDir path', () => {
+    setupValidArtifacts();
+    const cliScript = path.resolve(__dirname, '../scripts/stage-release-artifacts.js');
+    const res = spawnSync(process.execPath, [cliScript, stagingDir, tempDir], {
+      encoding: 'utf-8',
+    });
+
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('Successfully staged 5 release artifacts to staging directory.');
+    expect(res.stdout).toContain(` - ${vsixName}`);
+    expect(res.stdout).toContain(' - sample.pptx');
+    expect(res.stdout).toContain(' - sample.pdf');
+    expect(res.stdout).toContain(' - checksums.txt');
+    expect(res.stdout).toContain(' - release-manifest.json');
+    // Ensure absolute stagingDir is not in stdout
+    expect(res.stdout).not.toContain(stagingDir);
+    expect(res.stderr).toBe('');
   });
 });
 
